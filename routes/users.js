@@ -3,6 +3,8 @@ import pool from "../db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import { registerSchema, loginSchema } from "../schemas/userSchemas.js";
 
 const router = express.Router();
 
@@ -10,8 +12,8 @@ const router = express.Router();
 // POST /users/register
 // Registrar un nuevo usuario
 // =====================
-router.post("/register", async (req, res) => {
-    const { name, email, password } = req.body;
+router.post("/register", validate(registerSchema), async (req, res) => {
+    const { name, email, password, role } = req.body;
     if (!name || !email || !password) {
         return res.status(400).json({ error: "Faltan datos" });
     }
@@ -25,8 +27,8 @@ router.post("/register", async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const result = await pool.query(
-            "INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email, created_at",
-            [name, email, hashedPassword]
+            "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role, created_at",
+            [name, email, hashedPassword, role || "user"]
         );
 
         res.status(201).json(result.rows[0]);
@@ -40,7 +42,7 @@ router.post("/register", async (req, res) => {
 // POST /users/login
 // Iniciar sesión
 // =====================
-router.post("/login", async (req, res) => {
+router.post("/login", validate(loginSchema), async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
         return res.status(400).json({ error: "Faltan datos" });
@@ -60,7 +62,7 @@ router.post("/login", async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, name: user.name, email: user.email },
+            { id: user.id, name: user.name, email: user.email, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: "1h" }
         );

@@ -1,21 +1,26 @@
-const jwt = require("jsonwebtoken");
+// middleware/auth.js
+import jwt from "jsonwebtoken";
+import pool from "../db.js";
 
-const verifyToken = (req, res, next) => {
-  const token = req.headers["authorization"];
-  if (!token) return res.status(403).json({ error: "Token requerido" });
-
-  jwt.verify(token.split(" ")[1], process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(401).json({ error: "Token inválido" });
-    req.user = decoded; // { id, email, role }
+export function verifyToken(req, res, next) {
+  const auth = req.headers.authorization || "";
+  const parts = auth.split(" ");
+  if (parts.length !== 2 || parts[0] !== "Bearer") {
+    return res.status(401).json({ error: "Token requerido" });
+  }
+  const token = parts[1];
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = payload; // { id, name, email, role }
     next();
-  });
-};
+  } catch {
+    return res.status(401).json({ error: "Token inválido o expirado" });
+  }
+}
 
-const verifyAdmin = (req, res, next) => {
-  if (req.user.role !== "admin") {
-    return res.status(403).json({ error: "Acceso denegado, se requiere admin" });
+export function verifyAdmin(req, res, next) {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ error: "Acceso denegado: se requiere admin" });
   }
   next();
-};
-
-module.exports = { verifyToken, verifyAdmin };
+}
