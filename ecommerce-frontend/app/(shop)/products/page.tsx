@@ -4,53 +4,52 @@ import ProductCard from "@/components/ProductCard";
 import Filters from "@/app/(shop)/products/Filters";
 import Pagination from "@/app/(shop)/products/Pagination";
 
-type SP = Record<string, string | string[] | undefined>;
+type Product = {
+  id: number;
+  name: string;
+  description?: string | null;
+  price: number | string;
+  stock?: number | null;
+  category_id?: number | null;
+  category_name?: string | null;
+};
 
-async function fetchProducts(params: URLSearchParams) {
-  const { data } = await api.get("/products", {
-    params: Object.fromEntries(params),
-  });
-
-  // Si tu backend devuelve un array simple, lo adaptamos:
-  if (Array.isArray(data)) {
-    return {
-      items: data,
-      meta: { page: 1, totalPages: 1 },
-    };
+async function fetchProducts(
+  searchParams: Record<string, string | string[] | undefined>
+): Promise<Product[]> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(searchParams || {})) {
+    if (!v) continue;
+    params.set(k, Array.isArray(v) ? v[0] : v);
   }
+  const qs = params.toString();
+  const url = qs ? `/products?${qs}` : "/products";
 
-  // Si en el futuro devuelves { items, meta }, lo dejamos tal cual:
-  return data;
+  const { data } = await api.get(url);
+  // Si tu backend devuelve {items, meta}, adapta esto:
+  // return data.items as Product[];
+  return data as Product[];
 }
 
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<SP>;
+  searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const sp = await searchParams; // 👈 IMPORTANTE en Next 15
-  const usp = new URLSearchParams();
-
-  for (const [k, v] of Object.entries(sp ?? {})) {
-    if (!v) continue;
-    usp.set(k, Array.isArray(v) ? v[0] : v);
-  }
-
-  const data = await fetchProducts(usp);
+  const products = await fetchProducts(searchParams ?? {});
+  // Si tienes paginación real del backend, reemplaza estos valores:
+  const page = 1;
+  const totalPages = 1;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 space-y-6">
-      <h1 className="text-2xl font-semibold">Productos</h1>
+    <div className="p-4">
       <Filters />
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {data.items.map((p: any) => (
+        {products.map((p: Product) => (
           <ProductCard key={p.id} p={p} />
         ))}
       </div>
-      <Pagination page={data.meta.page} totalPages={data.meta.totalPages} />
+      <Pagination page={page} totalPages={totalPages} />
     </div>
   );
 }
-
-// Evita problemas de caché/SSG con filtros dinámicos
-export const dynamic = "force-dynamic";

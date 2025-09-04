@@ -3,7 +3,8 @@ import express from "express";
 import pool from "../db.js";
 import { validate } from "../middleware/validate.js";
 import { createOrderSchema, updateOrderStatusSchema } from "../schemas/orderSchemas.js";
-import { verifyToken } from "../middleware/auth.js";
+import { verifyToken, verifyAdmin } from "../middleware/auth.js";
+
 
 const router = express.Router();
 

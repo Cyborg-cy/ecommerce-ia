@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import { registerUser } from "@/lib/api";
 
@@ -10,72 +9,76 @@ export default function RegisterPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = name.trim() && email.trim() && password.trim();
-
   const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-
-    setLoading(true);
+    e.preventDefault();              // <--- evita submit clásico
     setMsg(null);
+    setLoading(true);
     try {
       await registerUser({ name, email, password });
       setMsg("✅ Cuenta creada. Ahora inicia sesión.");
-      setName("");
-      setEmail("");
-      setPassword("");
+      setName(""); setEmail(""); setPassword("");
     } catch (err: any) {
-      const detail =
-        err?.response?.data?.error ||
+      console.error(err);
+      setMsg(
+        (err?.response?.data?.error as string) ||
         err?.message ||
-        "Error registrando usuario";
-      setMsg("❌ " + detail);
+        "Error registrando usuario"
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="max-w-md mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">Crear cuenta</h1>
+    <div className="max-w-md mx-auto p-6">
+      <h1 className="text-2xl font-semibold mb-4">Crear cuenta</h1>
 
-      <form onSubmit={submit} className="space-y-4">
-        <input
-          className="w-full border p-2 rounded"
-          placeholder="Nombre"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoComplete="name"
-        />
-        <input
-          className="w-full border p-2 rounded"
-          placeholder="Email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
-        />
-        <input
-          className="w-full border p-2 rounded"
-          placeholder="Contraseña"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="new-password"
-        />
+      <form onSubmit={submit} /* sin action */>
+        <label className="block mb-2">
+          <span>Nombre</span>
+          <input
+            className="border rounded w-full p-2"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            autoComplete="name"
+          />
+        </label>
+
+        <label className="block mb-2">
+          <span>Email</span>
+          <input
+            className="border rounded w-full p-2"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+        </label>
+
+        <label className="block mb-4">
+          <span>Contraseña</span>
+          <input
+            className="border rounded w-full p-2"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="new-password"
+          />
+        </label>
 
         <button
           type="submit"
-          disabled={!canSubmit || loading}
-          className={`w-full p-2 rounded text-white ${
-            !canSubmit || loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-          }`}
+          disabled={loading}
+          className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
         >
-          {loading ? "Enviando..." : "Registrarme"}
+          {loading ? "Creando..." : "Crear cuenta"}
         </button>
       </form>
 
-      {msg && <p className="mt-4">{msg}</p>}
-    </main>
+      {msg && <p className="mt-4 text-sm">{msg}</p>}
+    </div>
   );
 }
