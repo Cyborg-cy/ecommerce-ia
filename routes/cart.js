@@ -27,7 +27,7 @@ router.get("/", verifyToken, async (req, res) => {
 
     const result = await pool.query(
       `SELECT ci.product_id, p.name, p.description, ci.quantity, ci.price_at_add AS price,
-              (ci.quantity * ci.price_at_add) AS subtotal
+              (ci.quantity * ci.price_at_add)::float8 AS subtotal  
        FROM cart_items ci
        JOIN products p ON p.id = ci.product_id
        WHERE ci.cart_id = $1
