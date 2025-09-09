@@ -4,7 +4,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { registerSchema, loginSchema } from "../schemas/userSchemas.js";
+import { registerSchema, loginSchema } from "../schemas/userSchemas.js"
 
 const router = express.Router();
 

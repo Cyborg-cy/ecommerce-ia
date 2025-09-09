@@ -1,70 +1,71 @@
 "use client";
 
-"use client";
-
 import { useState } from "react";
-import { loginUser } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { loginUser } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
-  const router = useRouter();
+  const { setToken, setUser } = useAuth();
+  const r = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErr(null);
+    setMsg(null);
     setLoading(true);
     try {
-      const { token } = await loginUser({ email, password });
-      localStorage.setItem("token", token);
-      router.push("/"); // o /products
-    } catch (e: any) {
-      const detail =
-        e?.response?.data?.error ||
-        e?.message ||
-        "Error desconocido al iniciar sesión";
-      setErr(detail);
+      const { token, user } = await loginUser({ email, password });
+      setToken(token);
+      setUser?.(user); // si tu auth context guarda el usuario
+      r.push("/");     // redirige a Home
+    } catch (err: any) {
+      setMsg(err?.response?.data?.error || "Error al iniciar sesión");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Iniciar sesión</h1>
-      <form className="space-y-3" onSubmit={submit}>
-        <input
-          className="w-full border rounded p-2"
-          placeholder="Correo"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+    <div className="p-6 max-w-md mx-auto">
+      <h1 className="text-2xl font-semibold mb-4">Entrar</h1>
+      <form onSubmit={submit} className="space-y-3">
+        <div>
+          <label className="block text-sm mb-1">Email</label>
+          <input
+            type="email"
+            className="w-full border rounded px-3 py-2"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+        </div>
+        <div>
+          <label className="block text-sm mb-1">Contraseña</label>
+          <input
+            type="password"
+            className="w-full border rounded px-3 py-2"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
+        </div>
 
-        <input
-          className="w-full border rounded p-2"
-          placeholder="Contraseña"
-          type="password"
-          value={password}
-          minLength={6}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        {msg && <p className="text-red-600 text-sm">{msg}</p>}
 
         <button
-          className="w-full bg-black text-white rounded p-2 disabled:opacity-50"
           type="submit"
           disabled={loading}
+          className="px-4 py-2 rounded bg-black text-white disabled:opacity-60"
         >
           {loading ? "Entrando..." : "Entrar"}
         </button>
       </form>
-
-      {err && <p className="text-red-600">❌ {err}</p>}
     </div>
   );
 }

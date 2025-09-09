@@ -1,84 +1,43 @@
 "use client";
+
 import { useState } from "react";
 import { registerUser } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const r = useRouter();
+  const [name,setName] = useState("");
+  const [email,setEmail] = useState("");
+  const [password,setPassword] = useState("");
+  const [msg,setMsg] = useState<string|null>(null);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();              // <--- evita submit clásico
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
     setMsg(null);
-    setLoading(true);
     try {
       await registerUser({ name, email, password });
-      setMsg("✅ Cuenta creada. Ahora inicia sesión.");
-      setName(""); setEmail(""); setPassword("");
-    } catch (err: any) {
-      console.error(err);
-      setMsg(
-        (err?.response?.data?.error as string) ||
-        err?.message ||
-        "Error registrando usuario"
-      );
-    } finally {
-      setLoading(false);
+      setMsg("Cuenta creada. Ahora inicia sesión.");
+      r.push("/login");
+    } catch (e:any) {
+      setMsg(e?.response?.data?.error || "Error registrando usuario");
     }
-  };
+  }
 
   return (
-    <div className="max-w-md mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-4">Crear cuenta</h1>
-
-      <form onSubmit={submit} /* sin action */>
-        <label className="block mb-2">
-          <span>Nombre</span>
-          <input
-            className="border rounded w-full p-2"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            autoComplete="name"
-          />
-        </label>
-
-        <label className="block mb-2">
-          <span>Email</span>
-          <input
-            className="border rounded w-full p-2"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
-        </label>
-
-        <label className="block mb-4">
-          <span>Contraseña</span>
-          <input
-            className="border rounded w-full p-2"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="new-password"
-          />
-        </label>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-          {loading ? "Creando..." : "Crear cuenta"}
+    <div className="p-6 max-w-md mx-auto">
+      <h1 className="text-xl font-bold mb-4">Crear cuenta</h1>
+      <form onSubmit={submit} className="space-y-3">
+        <input className="border w-full p-2" placeholder="Nombre"
+               value={name} onChange={(e)=>setName(e.target.value)} />
+        <input className="border w-full p-2" placeholder="Email"
+               value={email} onChange={(e)=>setEmail(e.target.value)} />
+        <input className="border w-full p-2" type="password" placeholder="Contraseña"
+               value={password} onChange={(e)=>setPassword(e.target.value)} />
+        <button className="px-4 py-2 bg-black text-white rounded">
+          Crear cuenta
         </button>
       </form>
-
-      {msg && <p className="mt-4 text-sm">{msg}</p>}
+      {msg && <p className="mt-3 text-sm text-gray-600">{msg}</p>}
     </div>
   );
 }

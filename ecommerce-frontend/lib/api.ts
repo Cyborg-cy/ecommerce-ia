@@ -1,38 +1,22 @@
-import axios, {
-  AxiosError,
-  AxiosHeaders,
-  type AxiosInstance,
-  type InternalAxiosRequestConfig,
-} from "axios";
+import axios, { InternalAxiosRequestConfig } from "axios";
 
-export const api: AxiosInstance = axios.create({
+export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000",
-  withCredentials: false, // usamos JWT en header, no cookies
+  withCredentials: false, // usamos header Authorization, no cookies
 });
 
-// Interceptor para inyectar headers de forma tipada (Axios v1)
-api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-    if (config.headers) {
-      const h = config.headers as any;
-      if (typeof h.set === "function") {
-        h.set("Content-Type", "application/json");
-        if (token) h.set("Authorization", `Bearer ${token}`);
-      } else {
-        h["Content-Type"] = "application/json";
-        if (token) h["Authorization"] = `Bearer ${token}`;
-      }
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers = config.headers ?? {};
+      (config.headers as any).Authorization = `Bearer ${token}`;
     }
-    return config;
-  },
-  (error: AxiosError) => Promise.reject(error)
-);
+  }
+  return config;
+});
 
-// ===== Helpers =====
-
+// Helpers mínimos
 export async function registerUser(payload: {
   name: string;
   email: string;
@@ -44,5 +28,5 @@ export async function registerUser(payload: {
 
 export async function loginUser(payload: { email: string; password: string }) {
   const { data } = await api.post("/users/login", payload);
-  return data as { token: string };
+  return data; // { token, user? }
 }
