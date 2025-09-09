@@ -1,32 +1,24 @@
+// components/AddToCartControls.tsx
 "use client";
-import { useState, useTransition } from "react";
-import { addToCart } from "@/lib/api";
+import { useState } from "react";
+import { api } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 
-export default function AddToCartButton({ productId, getQty }: { productId: number; getQty: () => number; }) {
-  const [msg, setMsg] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+export default function AddToCartControls({ productId }:{ productId:number }) {
+  const [qty, setQty] = useState(1);
+  const r = useRouter();
+  const { token } = useAuth();
 
+  async function add() {
+    if (!token) { r.push("/login"); return; }
+    await api.post("/cart/add", { product_id: productId, quantity: qty });
+    alert("Agregado al carrito");
+  }
   return (
-    <div className="space-y-2">
-      <button
-        disabled={pending}
-        onClick={() => {
-          setMsg(null);
-          start(async () => {
-            try {
-              const q = getQty();
-              await addToCart(productId, q);
-              setMsg("Producto agregado al carrito ✅");
-            } catch (e: any) {
-              setMsg(e?.message || "Error al agregar");
-            }
-          });
-        }}
-        className="bg-black text-white px-4 py-2 rounded"
-      >
-        {pending ? "Agregando..." : "Agregar al carrito"}
-      </button>
-      {msg && <div className="text-sm text-gray-600">{msg}</div>}
+    <div className="flex gap-2">
+      <input type="number" min={1} value={qty} onChange={e=>setQty(Math.max(1,Number(e.target.value||1)))} className="border rounded px-2 py-1 w-20" />
+      <button onClick={add} className="px-4 py-2 rounded bg-black text-white">Agregar al carrito</button>
     </div>
   );
 }
