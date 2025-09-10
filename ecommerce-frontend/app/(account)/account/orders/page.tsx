@@ -68,7 +68,7 @@ export default function OrdersPage() {
                     {typeof o.total === "string" ? o.total : o.total.toFixed(2)}
                   </div>
                   <Link
-                    href={`/orders/${o.id}`}
+                    href={`/account/orders/${o.id}`}
                     className="inline-block mt-2 px-3 py-1 border rounded hover:bg-gray-50"
                   >
                     Ver detalle
