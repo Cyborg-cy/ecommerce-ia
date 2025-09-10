@@ -37,7 +37,7 @@ export default async function Home() {
     <main className="p-6 space-y-8">
       {/* Hero simple */}
       <section className="rounded-2xl p-8 bg-gray-100">
-        <h1 className="text-3xl font-bold">Bienvenido a la tienda</h1>
+        <h1 className="text-3xl text-gray-600">Bienvenido a ALWAYS BUY</h1>
         <p className="text-gray-600">Ofertas y novedades cada semana.</p>
         <div className="mt-4">
           <Link

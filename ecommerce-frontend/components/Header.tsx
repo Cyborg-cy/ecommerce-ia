@@ -45,14 +45,14 @@ export default function Header() {
             Productos
           </Link>
           {token && (
-            <Link href="/orders" className="text-sm text-gray-700 hover:underline">
-              Mis pedidos
-            </Link>
+            <Link href="/account/orders" className="text-sm text-gray-700 hover:underline">
+  Mis pedidos
+</Link>
           )}
           {token && cartCount > 0 && (
-            <Link href="/checkout" className="text-sm text-gray-700 hover:underline">
-              Carrito ({cartCount})
-            </Link>
+            <Link href="/cart" className="text-sm text-gray-700 hover:underline">
+  Carrito ({cartCount})
+</Link>
           )}
         </nav>
 
