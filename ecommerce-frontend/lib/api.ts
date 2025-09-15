@@ -1,7 +1,10 @@
 import axios, { InternalAxiosRequestConfig } from "axios";
 
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000",
+  baseURL:
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:3000",
   withCredentials: false, // usamos header Authorization, no cookies
 });
 

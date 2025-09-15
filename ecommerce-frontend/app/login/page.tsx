@@ -1,29 +1,45 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation"; // 👈 faltaba esto
 import { loginUser } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
   const { setToken, setUser } = useAuth();
+  const sp = useSearchParams();
   const r = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Si ya hay token, salta el login y ve al destino
+  useEffect(() => {
+    const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (t) {
+      const next = sp.get("next") || "/admin"; // 👈 vuelve a donde ibas (por defecto /admin)
+      r.replace(next);
+    }
+  }, [sp, r]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
     setLoading(true);
     try {
-      const { token, user } = await loginUser({ email, password });
-      setToken(token);
-      setUser?.(user); // si tu auth context guarda el usuario
-      r.push("/");     // redirige a Home
+      const res = await loginUser({ email, password }); // espera { token, user? }
+      const token = res?.token;
+      if (!token) throw new Error("Respuesta inválida del servidor (sin token).");
+
+      setToken(token);         // tu AuthProvider guardará en localStorage y/o levantará perfil
+      if (res.user) setUser?.(res.user); // opcional: si tu API devuelve user
+
+      const next = sp.get("next") || "/admin"; // 👈 vuelve a admin si venías de allí
+      r.replace(next);
     } catch (err: any) {
-      setMsg(err?.response?.data?.error || "Error al iniciar sesión");
+      setMsg(err?.response?.data?.error || err?.message || "Error al iniciar sesión");
     } finally {
       setLoading(false);
     }

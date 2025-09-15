@@ -18,7 +18,10 @@ const PAGE_SIZE = 9;
 async function getProducts(
   sp: URLSearchParams
 ): Promise<Product[]> {
-  const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:3000";
 
   // Pasamos los mismos filtros al backend por si en un futuro haces filtro/paginación real
   const url = sp.toString()
