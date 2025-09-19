@@ -1,25 +1,38 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
-
-export default function Pagination({ page, totalPages }: { page: number; totalPages: number; }) {
-const router = useRouter();
-const sp = useSearchParams();
-const go = (p: number) => {
-const params = new URLSearchParams(sp.toString());
-params.set("page", String(p));
-router.push(`/products?${params.toString()}`);
+type Props = {
+  page: number;
+  totalPages: number;
+  prevHref: string;
+  nextHref: string;
 };
 
+export default function Pagination({ page, totalPages, prevHref, nextHref }: Props) {
+  if (totalPages <= 1) return null;
 
-if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center gap-2 mt-4">
+      <Link
+        href={prevHref}
+        className={`px-3 py-1 border rounded ${page === 1 ? "pointer-events-none opacity-50" : ""}`}
+        aria-disabled={page === 1}
+      >
+        ← Anterior
+      </Link>
 
+      <span className="text-sm">
+        Página {page} de {totalPages}
+      </span>
 
-return (
-<div className="flex gap-2 items-center justify-center mt-6">
-<button disabled={page<=1} onClick={()=>go(page-1)} className="px-3 py-1 rounded border disabled:opacity-50">Prev</button>
-<span className="text-sm">{page} / {totalPages}</span>
-<button disabled={page>=totalPages} onClick={()=>go(page+1)} className="px-3 py-1 rounded border disabled:opacity-50">Next</button>
-</div>
-);
+      <Link
+        href={nextHref}
+        className={`px-3 py-1 border rounded ${page === totalPages ? "pointer-events-none opacity-50" : ""}`}
+        aria-disabled={page === totalPages}
+      >
+        Siguiente →
+      </Link>
+    </div>
+  );
 }

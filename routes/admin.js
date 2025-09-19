@@ -57,6 +57,22 @@ router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
   res.json(rows);
 });
 
+// GET /admin/stats
+router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const [{ rows: u }, { rows: p }, { rows: o }, { rows: r }] = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS total_users FROM users"),
+      pool.query("SELECT COUNT(*)::int AS total_products FROM products"),
+      pool.query("SELECT COUNT(*)::int AS total_orders FROM orders"),
+      pool.query("SELECT COALESCE(SUM(total)::numeric::float8, 0) AS revenue_paid FROM orders WHERE status = 'paid'"),
+    ]);
+    res.json({ ...u[0], ...p[0], ...o[0], ...r[0] });
+  } catch (err) {
+    console.error("GET /admin/stats", err);
+    res.status(500).json({ error: "No se pudieron obtener estadísticas" });
+  }
+});
+
 /* PUT /admin/orders/:id/status  body: { status } */
 router.put("/orders/:id/status", verifyToken, verifyAdmin, async (req, res) => {
   const { id } = req.params;

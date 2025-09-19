@@ -1,7 +1,6 @@
-// app/(shop)/products/page.tsx
 import ProductCard from "@/components/ProductCard";
 import Filters from "./Filters";
-import Pagination from "./Pagination";
+import Pagination from "@/components/Pagination";
 
 type Product = {
   id: number;
@@ -13,33 +12,14 @@ type Product = {
   category_name?: string | null;
 };
 
+type Meta = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
 const PAGE_SIZE = 9;
-
-async function getProducts(
-  sp: URLSearchParams
-): Promise<Product[]> {
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:3000";
-
-  // Pasamos los mismos filtros al backend por si en un futuro haces filtro/paginación real
-  const url = sp.toString()
-    ? `${base}/products?${sp.toString()}`
-    : `${base}/products`;
-
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    console.error("API /products respondió", res.status);
-    return [];
-  }
-  const data = await res.json();
-  // Soporta array directo o {items, meta}
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data.items)) return data.items;
-  console.error("Formato inesperado de /products:", data);
-  return [];
-}
 
 function applyClientFilters(items: Product[], sp: URLSearchParams) {
   const q = (sp.get("q") || "").toLowerCase().trim();
@@ -50,23 +30,32 @@ function applyClientFilters(items: Product[], sp: URLSearchParams) {
   return items.filter((p) => {
     const name = (p.name || "").toLowerCase();
     const desc = (p.description || "").toLowerCase();
-    const price = Number(p.price);
+    const priceNum = Number(p.price);
 
     if (q && !name.includes(q) && !desc.includes(q)) return false;
     if (category && String(p.category_id ?? "") !== category) return false;
-    if (!Number.isNaN(min) && min > 0 && price < min) return false;
-    if (!Number.isNaN(max) && max > 0 && price > max) return false;
+    if (!Number.isNaN(min) && min > 0 && priceNum < min) return false;
+    if (!Number.isNaN(max) && max > 0 && priceNum > max) return false;
     return true;
   });
+}
+
+function buildSearchQS(sp: URLSearchParams, page: number, pageSize: number) {
+  const qs = new URLSearchParams();
+  if (sp.get("q")) qs.set("q", sp.get("q")!);
+  if (sp.get("category")) qs.set("category_id", sp.get("category")!);
+  if (sp.get("min")) qs.set("minPrice", sp.get("min")!);
+  if (sp.get("max")) qs.set("maxPrice", sp.get("max")!);
+  qs.set("page", String(page));
+  qs.set("pageSize", String(pageSize));
+  return qs;
 }
 
 export default async function ProductsPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  // ⚠️ Next 15: hay que hacer await a searchParams
   const raw = await props.searchParams;
 
-  // Normalizamos a URLSearchParams (tomando solo el primer valor de cada key)
   const sp = new URLSearchParams(
     Object.entries(raw || {}).reduce((acc, [k, v]) => {
       acc[k] = Array.isArray(v) ? v[0] : (v ?? "");
@@ -74,19 +63,75 @@ export default async function ProductsPage(props: {
     }, {} as Record<string, string>)
   );
 
-  // Página actual (cliente)
   const page = Math.max(1, parseInt(sp.get("page") || "1", 10));
+  const pageSize = Math.max(1, parseInt(sp.get("pageSize") || String(PAGE_SIZE), 10));
 
-  // 1) Traer todo (o lo filtrado por backend si algún día lo implementas)
-  const all = await getProducts(sp);
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:3000";
 
-  // 2) Aplicar filtros del lado del cliente (texto, categoría, precio)
-  const filtered = applyClientFilters(all, sp);
+  let items: Product[] = [];
+  let meta: Meta = { page, pageSize, total: 0, totalPages: 1 };
 
-  // 3) Paginación en cliente
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const start = (page - 1) * PAGE_SIZE;
-  const items = filtered.slice(start, start + PAGE_SIZE);
+  // Intentar backend con paginación real
+  try {
+    const qs = buildSearchQS(sp, page, pageSize);
+    const res = await fetch(`${base}/products/search?${qs.toString()}`, { cache: "no-store" });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.items) && data?.meta) {
+        items = data.items;
+        meta = {
+          page: Number(data.meta.page ?? page),
+          pageSize: Number(data.meta.pageSize ?? pageSize),
+          total: Number(data.meta.total ?? 0),
+          totalPages: Math.max(1, Number(data.meta.totalPages ?? 1)),
+        };
+      } else {
+        throw new Error("Formato inesperado en /products/search");
+      }
+    } else if (res.status === 404) {
+      throw new Error("Endpoint /products/search no disponible");
+    } else {
+      throw new Error(`Error ${res.status} en /products/search`);
+    }
+  } catch {
+    // Fallback: GET /products + filtros/paginación en cliente
+    const url = sp.toString() ? `${base}/products?${sp.toString()}` : `${base}/products`;
+    const res = await fetch(url, { cache: "no-store" });
+
+    if (res.ok) {
+      const data = await res.json();
+      const all: Product[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data.items)
+        ? data.items
+        : [];
+
+      const filtered = applyClientFilters(all, sp);
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      const start = (page - 1) * pageSize;
+      items = filtered.slice(start, start + pageSize);
+      meta = { page, pageSize, total: filtered.length, totalPages };
+    } else {
+      items = [];
+      meta = { page, pageSize, total: 0, totalPages: 1 };
+    }
+  }
+
+  // Construir hrefs (strings) para Pagination
+  const buildHref = (p: number) => {
+    const q2 = new URLSearchParams(sp);
+    q2.set("page", String(p));
+    q2.set("pageSize", String(pageSize));
+    return `/products?${q2.toString()}`;
+  };
+  const prev = Math.max(meta.page - 1, 1);
+  const next = Math.min(meta.page + 1, meta.totalPages);
+  const prevHref = buildHref(prev);
+  const nextHref = buildHref(next);
 
   return (
     <div className="p-4">
@@ -104,7 +149,12 @@ export default async function ProductsPage(props: {
         </div>
       )}
 
-      <Pagination page={page} totalPages={totalPages} />
+      <Pagination
+        page={meta.page}
+        totalPages={meta.totalPages}
+        prevHref={prevHref}
+        nextHref={nextHref}
+      />
     </div>
   );
 }
