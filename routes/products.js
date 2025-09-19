@@ -223,6 +223,78 @@ router.put("/:id", verifyToken, verifyAdmin, validate(updateProductSchema), asyn
     res.status(500).json({ error: "Error al actualizar producto" });
   }
 });
+
+router.get("/search", async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page || "1"), 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || "12"), 1), 60);
+
+    const q = (req.query.q || "").toString().trim();
+    const minPrice = req.query.minPrice ? Number(req.query.minPrice) : null;
+    const maxPrice = req.query.maxPrice ? Number(req.query.maxPrice) : null;
+    const categoryId = req.query.category_id ? parseInt(req.query.category_id, 10) : null;
+    const sort = (req.query.sort || "new").toString(); // new | price_asc | price_desc | name
+
+    const where = [];
+    const params = [];
+
+    if (q) {
+      params.push(`%${q}%`);
+      where.push(`p.name ILIKE $${params.length}`);
+    }
+    if (Number.isFinite(minPrice)) {
+      params.push(minPrice);
+      where.push(`p.price >= $${params.length}`);
+    }
+    if (Number.isFinite(maxPrice)) {
+      params.push(maxPrice);
+      where.push(`p.price <= $${params.length}`);
+    }
+    if (Number.isInteger(categoryId)) {
+      params.push(categoryId);
+      where.push(`p.category_id = $${params.length}`);
+    }
+
+    const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    let orderBy = "p.created_at DESC";
+    if (sort === "price_asc") orderBy = "p.price ASC";
+    else if (sort === "price_desc") orderBy = "p.price DESC";
+    else if (sort === "name") orderBy = "p.name ASC";
+
+    // total
+    const { rows: totalRows } = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM products p ${whereSQL}`,
+      params
+    );
+    const total = totalRows[0]?.total || 0;
+    const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+    const offset = (page - 1) * pageSize;
+
+    // items
+    const { rows: items } = await pool.query(
+      `
+      SELECT
+        p.id, p.name, p.description,
+        p.price::numeric::float8 AS price,
+        p.stock, p.category_id, p.created_at
+      FROM products p
+      ${whereSQL}
+      ORDER BY ${orderBy}
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `,
+      [...params, pageSize, offset]
+    );
+
+    res.json({
+      items,
+      meta: { page, pageSize, total, totalPages },
+    });
+  } catch (err) {
+    console.error("GET /products/search", err);
+    res.status(500).json({ error: "No se pudo listar productos" });
+  }
+});
 /* =================================================
    DELETE /products/:id  (protegido: token + admin)
    ================================================= */
