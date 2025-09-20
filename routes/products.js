@@ -124,6 +124,97 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ error: "Error al obtener producto" });
   }
 });
+// Recomendaciones basadas en el producto actual
+router.get("/recommendations/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "8", 10), 1), 20);
+
+    // producto base
+    const { rows: baseRows } = await pool.query(
+      "SELECT id, category_id, price::numeric::float8 AS price FROM products WHERE id=$1",
+      [id]
+    );
+    if (!baseRows.length) return res.status(404).json({ error: "Producto no encontrado" });
+
+    const base = baseRows[0];
+    const basePrice = Number(base.price) || 0;
+    const hasCategory = base.category_id != null;
+    const minPrice = basePrice * 0.8;
+    const maxPrice = basePrice * 1.2;
+
+    const out = [];
+
+    // 1) Misma categoría + precio ±20%
+    if (hasCategory) {
+      const { rows } = await pool.query(
+        `SELECT id, name, description, price::numeric::float8 AS price, stock, category_id
+         FROM products
+         WHERE id <> $1
+           AND category_id = $2
+           AND price BETWEEN $3 AND $4
+         ORDER BY ABS(price - $5) ASC, id DESC
+         LIMIT $6`,
+        [id, base.category_id, minPrice, maxPrice, basePrice, limit]
+      );
+      out.push(...rows);
+    }
+
+    // 2) Si faltan, misma categoría (cualquier precio)
+    if (out.length < limit && hasCategory) {
+      const { rows } = await pool.query(
+        `SELECT id, name, description, price::numeric::float8 AS price, stock, category_id
+         FROM products
+         WHERE id <> $1
+           AND category_id = $2
+           AND id NOT IN (${out.map((r) => r.id).concat([id]).map((_,i)=>`$${i+3}`).join(",") || "$3"})
+         ORDER BY ABS(price - $${out.length ? out.length + 3 : 3}) ASC, id DESC
+         LIMIT $${out.length ? out.length + 4 : 4}`,
+        // params dinámicos:
+        (function() {
+          const params = [id, base.category_id];
+          const usedIds = out.map((r) => r.id).concat([id]);
+          params.push(...usedIds);
+          params.push(basePrice);
+          params.push(limit - out.length);
+          return params;
+        })()
+      );
+      out.push(...rows);
+    }
+
+    // 3) Si aún faltan, global por cercanía de precio
+    if (out.length < limit) {
+      const { rows } = await pool.query(
+        `SELECT id, name, description, price::numeric::float8 AS price, stock, category_id
+         FROM products
+         WHERE id <> $1
+           AND id <> ALL($2::int[])
+         ORDER BY ABS(price - $3) ASC, id DESC
+         LIMIT $4`,
+        [id, out.map((r) => r.id), basePrice, limit - out.length]
+      );
+      out.push(...rows);
+    }
+
+    // dedup por si acaso
+    const unique = [];
+    const seen = new Set();
+    for (const r of out) {
+      if (!seen.has(r.id)) { seen.add(r.id); unique.push(r); }
+      if (unique.length === limit) break;
+    }
+
+    res.json(unique);
+  } catch (err) {
+    console.error("GET /recommendations/:id", err);
+    res.status(500).json({ error: "No se pudieron obtener recomendaciones" });
+  }
+});
+
 
 /* ============================================
    POST /products  (protegido: token + admin)
@@ -237,6 +328,7 @@ router.get("/search", async (req, res) => {
 
     const where = [];
     const params = [];
+    
 
     if (q) {
       params.push(`%${q}%`);
@@ -293,6 +385,32 @@ router.get("/search", async (req, res) => {
   } catch (err) {
     console.error("GET /products/search", err);
     res.status(500).json({ error: "No se pudo listar productos" });
+  }
+});
+
+// (2) DETALLE por ID — robusto
+router.get("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT
+         id, name, description,
+         price::numeric::float8 AS price,
+         stock, category_id
+       FROM products
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: "Producto no encontrado" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("GET /products/:id", err);
+    res.status(500).json({ error: "Error al obtener producto" });
   }
 });
 /* =================================================

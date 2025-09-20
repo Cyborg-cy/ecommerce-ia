@@ -85,6 +85,8 @@ export default function AdminDashboardPage() {
             <Link href="/admin/products" className="px-3 py-1 rounded border">Ver productos</Link>
             <Link href="/admin/users" className="px-3 py-1 rounded border">Ver usuarios</Link>
             <Link href="/admin/orders" className="px-3 py-1 rounded border">Ver pedidos</Link>
+            <Link href="/admin/categories" className="px-3 py-1 rounded border">Ver categorías</Link>
+
           </div>
         </div>
 

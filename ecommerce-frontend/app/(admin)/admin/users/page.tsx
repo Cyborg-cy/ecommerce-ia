@@ -6,47 +6,47 @@ import toast from "react-hot-toast";
 
 type User = {
   id: number;
-  name?: string;
-  email?: string;
-  role?: "admin" | "user";
-  is_admin?: boolean;
+  name: string | null;
+  email: string;
+  role: "user" | "admin";
   created_at?: string;
 };
+
+const PAGE_SIZE = 20;
 
 export default function AdminUsersPage() {
   const [items, setItems] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
 
-  async function load(p = page) {
+  const DEFAULT_API = "http://localhost:3000";
+  const RAW_BASE =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    DEFAULT_API;
+  const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
+
+  async function load(p = 1) {
     setLoading(true);
     setErr(null);
     try {
-      const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-      const res = await fetch(`${base}/admin/users?page=${p}&pageSize=${pageSize}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        cache: "no-store",
-      });
-
+      const url = `${base}/admin/users?page=${p}&pageSize=${PAGE_SIZE}`;
+      const res = await fetch(url, { headers, cache: "no-store" });
       if (!res.ok) {
-        // Mensajes más específicos
-        if (res.status === 401) throw new Error("No autenticado. Inicia sesión.");
-        if (res.status === 403) throw new Error("No autorizado. Requiere rol admin.");
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || `Error ${res.status}`);
+        const txt = await res.text();
+        throw new Error(`GET ${url} → ${res.status} ${txt || ""}`.trim());
       }
-
       const data = await res.json();
-      // Tu backend devuelve { page, pageSize, users: [...] }
-      const arr: User[] = data?.users ?? [];
-      setItems(Array.isArray(arr) ? arr : []);
+      setItems(data.users ?? []);
     } catch (e: any) {
-      toast.error(e?.message || "No se pudo cargar usuarios");
+      const msg = e?.message || "No se pudo cargar usuarios";
+      setErr(msg);
+      toast.error(msg);
       setItems([]);
     } finally {
       setLoading(false);
@@ -54,34 +54,38 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
-    load(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    load(page);
+  }, [page]);
 
-  const canPrev = page > 1;
-  const canNext = items.length === pageSize; // si vienen 20, asumimos hay otra página
+  async function toggleRole(u: User) {
+    const nextRole = u.role === "admin" ? "user" : "admin";
+    if (!confirm(`Cambiar rol de ${u.email} a "${nextRole}"?`)) return;
 
-  async function setRole(id: number, makeAdmin: boolean) {
     try {
-      const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
+      setUpdatingId(u.id);
       const token = localStorage.getItem("token") || "";
-      const res = await fetch(`${base}/admin/users/${id}/role`, {
-        method: "PATCH", // tu backend usa PATCH
+      const url = `${base}/admin/users/${u.id}/role`;
+      const res = await fetch(url, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ role: makeAdmin ? "admin" : "user" }),
-      
+        body: JSON.stringify({ role: nextRole }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || "No se pudo actualizar el rol");
+        const txt = await res.text();
+        throw new Error(`PATCH ${url} → ${res.status} ${txt || ""}`.trim());
       }
-      toast.success(makeAdmin ? "Usuario ahora es admin" : "Rol admin removido");
-      await load(page);
+      toast.success(`Rol actualizado a "${nextRole}"`);
+      // Optimista: actualiza en memoria
+      setItems((arr) =>
+        arr.map((x) => (x.id === u.id ? { ...x, role: nextRole } as User : x))
+      );
     } catch (e: any) {
       toast.error(e?.message || "Error al actualizar rol");
+    } finally {
+      setUpdatingId(null);
     }
   }
 
@@ -90,31 +94,7 @@ export default function AdminUsersPage() {
       <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Usuarios</h1>
-
-          <div className="flex gap-2">
-            <button
-              className="px-3 py-1 rounded border disabled:opacity-50"
-              disabled={!canPrev}
-              onClick={() => {
-                const p = page - 1;
-                setPage(p);
-                load(p);
-              }}
-            >
-              ← Anterior
-            </button>
-            <button
-              className="px-3 py-1 rounded border disabled:opacity-50"
-              disabled={!canNext}
-              onClick={() => {
-                const p = page + 1;
-                setPage(p);
-                load(p);
-              }}
-            >
-              Siguiente →
-            </button>
-          </div>
+          {/* si quieres filtros/búsqueda, los agregamos luego */}
         </div>
 
         {loading ? (
@@ -123,58 +103,65 @@ export default function AdminUsersPage() {
           <p className="text-red-600 text-sm">{err}</p>
         ) : (
           <div className="overflow-auto">
-            <table className="min-w-[900px] w-full border">
+            <table className="min-w-[800px] w-full border">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="p-2 border text-left">ID</th>
                   <th className="p-2 border text-left">Nombre</th>
                   <th className="p-2 border text-left">Email</th>
                   <th className="p-2 border text-left">Rol</th>
-                  <th className="p-2 border text-left">Creado</th>
                   <th className="p-2 border text-left">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((u) => {
-                  const role = u.role ?? (u.is_admin ? "admin" : "user");
-                  return (
-                    <tr key={u.id} className="border-t">
-                      <td className="p-2 border">{u.id}</td>
-                      <td className="p-2 border">{u.name ?? "—"}</td>
-                      <td className="p-2 border">{u.email ?? "—"}</td>
-                      <td className="p-2 border">{role}</td>
-                      <td className="p-2 border">
-                        {u.created_at ? new Date(u.created_at).toLocaleString() : "—"}
-                      </td>
-                      <td className="p-2 border">
-                        {role === "admin" ? (
-                          <button
-                            onClick={() => setRole(u.id, false)}
-                            className="text-sm underline"
-                          >
-                            Quitar admin
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setRole(u.id, true)}
-                            className="text-sm underline"
-                          >
-                            Hacer admin
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {items.map((u) => (
+                  <tr key={u.id} className="border-t">
+                    <td className="p-2 border">{u.id}</td>
+                    <td className="p-2 border">{u.name || "—"}</td>
+                    <td className="p-2 border">{u.email}</td>
+                    <td className="p-2 border">{u.role}</td>
+                    <td className="p-2 border">
+                      <button
+                        onClick={() => toggleRole(u)}
+                        disabled={updatingId === u.id}
+                        className="underline text-sm disabled:opacity-60"
+                      >
+                        {updatingId === u.id
+                          ? "Actualizando…"
+                          : u.role === "admin"
+                          ? "Bajar a user"
+                          : "Elevar a admin"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
                 {items.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-4 text-center text-gray-500">
+                    <td colSpan={5} className="p-4 text-center text-gray-500">
                       Sin usuarios
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+
+            {/* paginita simple; si no la necesitas, la quitamos */}
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1 border rounded text-sm"
+                disabled={page === 1}
+              >
+                ← Anterior
+              </button>
+              <span className="text-sm">Página {page}</span>
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1 border rounded text-sm"
+              >
+                Siguiente →
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -5,7 +5,7 @@ import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
-/* GET /admin/users?page=1&pageSize=20 */
+/* ---------- USERS (ejemplo que ya tienes) ---------- */
 router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   const page = Math.max(parseInt(req.query.page || "1"), 1);
   const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || "20"), 1), 100);
@@ -21,7 +21,6 @@ router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   res.json({ page, pageSize, users: rows });
 });
 
-/* PATCH /admin/users/:id/role  body: { role: 'admin' | 'user' } */
 router.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
   const { id } = req.params;
   const { role } = req.body;
@@ -36,7 +35,7 @@ router.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
   res.json(rows[0]);
 });
 
-/* GET /admin/orders?status=pending&from=2025-08-01&to=2025-08-31 */
+/* ---------- ORDERS (ejemplo que ya tienes) ---------- */
 router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
   const { status, from, to } = req.query;
   const params = [];
@@ -57,8 +56,8 @@ router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
   res.json(rows);
 });
 
-// GET /admin/stats
-router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
+/* ---------- STATS (ejemplo que ya tienes) ---------- */
+router.get("/stats", verifyToken, verifyAdmin, async (_req, res) => {
   try {
     const [{ rows: u }, { rows: p }, { rows: o }, { rows: r }] = await Promise.all([
       pool.query("SELECT COUNT(*)::int AS total_users FROM users"),
@@ -73,18 +72,112 @@ router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
-/* PUT /admin/orders/:id/status  body: { status } */
-router.put("/orders/:id/status", verifyToken, verifyAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body; // e.g. pending, paid, shipped, cancelled
-  if (!status) return res.status(400).json({ error: "Falta status" });
+/* ========== CATEGORIES (ADMIN) — ESTAS SON LAS QUE ROMPÍAN ========== */
 
-  const { rows } = await pool.query(
-    "UPDATE orders SET status=$1 WHERE id=$2 RETURNING *",
-    [status, id]
-  );
-  if (!rows.length) return res.status(404).json({ error: "Pedido no encontrado" });
-  res.json(rows[0]);
+// GET /admin/categories
+router.get("/categories", verifyToken, verifyAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, name, description FROM categories ORDER BY id ASC"
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("GET /admin/categories", err);
+    res.status(500).json({ error: "No se pudo cargar categorías" });
+  }
+});
+
+// PUT /admin/categories/:id
+router.put("/categories/:id", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+    let { name, description } = req.body || {};
+    name = (name || "").trim();
+    if (!name) return res.status(400).json({ error: "El nombre es obligatorio" });
+    description =
+      description === undefined || description === null
+        ? null
+        : String(description).trim() || null;
+
+    const { rows } = await pool.query(
+      `UPDATE categories
+         SET name=$1, description=$2
+       WHERE id=$3
+       RETURNING id, name, description`,
+      [name, description, id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Categoría no encontrada" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("PUT /admin/categories/:id", err);
+    res.status(500).json({ error: "No se pudo guardar la categoría" });
+  }
+});
+
+// DELETE /admin/categories/:id?reassignTo=<id>
+router.delete("/categories/:id", verifyToken, verifyAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const reassignTo = req.query.reassignTo ? parseInt(req.query.reassignTo, 10) : null;
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "ID inválido" });
+  }
+  if (reassignTo !== null) {
+    if (!Number.isInteger(reassignTo) || reassignTo <= 0) {
+      return res.status(400).json({ error: "reassignTo inválido" });
+    }
+    if (reassignTo === id) {
+      return res.status(400).json({ error: "reassignTo no puede ser igual al ID a eliminar" });
+    }
+  }
+
+  try {
+    await pool.query("BEGIN");
+
+    const cat = await pool.query("SELECT id FROM categories WHERE id=$1", [id]);
+    if (!cat.rows.length) {
+      await pool.query("ROLLBACK");
+      return res.status(404).json({ error: "Categoría no encontrada" });
+    }
+
+    const { rows } = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM products WHERE category_id=$1",
+      [id]
+    );
+    const count = rows[0]?.count ?? 0;
+
+    if (count > 0 && reassignTo === null) {
+      await pool.query("ROLLBACK");
+      return res.status(409).json({
+        error: `No se puede eliminar: hay ${count} producto(s) usando esta categoría`,
+        needReassign: true,
+        count,
+      });
+    }
+
+    if (count > 0 && reassignTo !== null) {
+      const dst = await pool.query("SELECT id FROM categories WHERE id=$1", [reassignTo]);
+      if (!dst.rows.length) {
+        await pool.query("ROLLBACK");
+        return res.status(400).json({ error: "La categoría destino no existe" });
+      }
+      await pool.query(
+        "UPDATE products SET category_id=$1 WHERE category_id=$2",
+        [reassignTo, id]
+      );
+    }
+
+    await pool.query("DELETE FROM categories WHERE id=$1", [id]);
+    await pool.query("COMMIT");
+    res.json({ ok: true });
+  } catch (err) {
+    await pool.query("ROLLBACK").catch(() => {});
+    console.error("DELETE /admin/categories/:id", err);
+    res.status(500).json({ error: "No se pudo eliminar la categoría" });
+  }
 });
 
 export default router;

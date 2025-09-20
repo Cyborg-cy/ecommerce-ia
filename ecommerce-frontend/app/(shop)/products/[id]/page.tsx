@@ -1,6 +1,9 @@
 // app/(shop)/products/[id]/page.tsx
 import { api } from "@/lib/api";
 import BuyBox from "@/components/BuyBox";
+import Recommendations from "@/components/Recommendations";
+
+
 
 type Product = {
   id: number;
@@ -10,13 +13,21 @@ type Product = {
   stock?: number | null;
 };
 
-async function getProduct(id: string): Promise<Product | null> {
+async function getProduct(id: string) {
+  const pid = Number.parseInt(id, 10);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error("ID inválido");
+  }
   try {
-    const { data } = await api.get(`/products/${id}`);
+    const { data } = await api.get(`/products/${pid}`);
     return data;
-  } catch (e) {
-    console.error("Error getProduct", e);
-    return null;
+  } catch (e: any) {
+    // Log más explícito para depurar
+    console.error("GET /products/:id error", {
+      status: e?.response?.status,
+      data: e?.response?.data,
+    });
+    throw new Error(e?.response?.data?.error || "No se pudo cargar el producto");
   }
 }
 
@@ -39,6 +50,7 @@ export default async function ProductDetail({
 
       {/* Caja cliente con input + botón */}
       <BuyBox productId={Number(id)} />
+      <Recommendations productId={product.id} />
     </div>
   );
 }
