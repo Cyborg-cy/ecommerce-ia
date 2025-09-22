@@ -1,11 +1,17 @@
 // routes/admin.js
+console.log("ADMIN ROUTER CARGADO");
+
+
 import express from "express";
 import pool from "../db.js";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
-/* ---------- USERS (ejemplo que ya tienes) ---------- */
+
+// ===== USUARIOS =====
+
+// GET /admin/users
 router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   const page = Math.max(parseInt(req.query.page || "1"), 1);
   const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || "20"), 1), 100);
@@ -13,7 +19,7 @@ router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT id, name, email, role, created_at
-     FROM users
+       FROM users
      ORDER BY id ASC
      LIMIT $1 OFFSET $2`,
     [pageSize, offset]
@@ -21,12 +27,58 @@ router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   res.json({ page, pageSize, users: rows });
 });
 
-router.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { role } = req.body;
-  if (!["user", "admin"].includes(role)) {
-    return res.status(400).json({ error: "Rol inválido" });
+// GET /admin/users/:id  -> ver un usuario
+router.get("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "ID inválido" });
   }
+  const { rows } = await pool.query(
+    "SELECT id, name, email, role, created_at FROM users WHERE id=$1",
+    [id]
+  );
+  if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+  res.json(rows[0]);
+});
+
+// PUT /admin/users/:id  -> editar campos básicos (opcional si quieres editar, el rol ya lo manejas con PATCH)
+router.put("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "ID inválido" });
+  }
+  // permite actualizar name/email; el rol mejor con PATCH /role como ya haces
+  let { name, email } = req.body || {};
+  name = (name ?? "").trim();
+  email = (email ?? "").trim();
+
+  if (!name && !email) {
+    return res.status(400).json({ error: "Nada para actualizar" });
+  }
+
+  // construimos dinámicamente el UPDATE
+  const sets = [];
+  const vals = [];
+  if (name) { sets.push(`name=$${sets.length+1}`); vals.push(name); }
+  if (email) { sets.push(`email=$${sets.length+1}`); vals.push(email); }
+  vals.push(id);
+
+  const { rows } = await pool.query(
+    `UPDATE users SET ${sets.join(", ")} WHERE id=$${vals.length} 
+     RETURNING id, name, email, role, created_at`,
+    vals
+  );
+  if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+  res.json(rows[0]);
+});
+
+// PATCH /admin/users/:id/role
+router.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const { role } = req.body || {};
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID inválido" });
+  if (!["user", "admin"].includes(role)) return res.status(400).json({ error: "Rol inválido" });
+
   const { rows } = await pool.query(
     "UPDATE users SET role=$1 WHERE id=$2 RETURNING id, name, email, role, created_at",
     [role, id]
@@ -34,6 +86,41 @@ router.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
   if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
   res.json(rows[0]);
 });
+
+// DELETE /admin/users/:id
+router.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
+  const targetId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(targetId) || targetId <= 0) {
+    return res.status(400).json({ error: "ID inválido" });
+  }
+  try {
+    // Evita borrarte a ti mismo
+    const me = req.user?.id;
+    if (Number(me) === targetId) {
+      return res.status(400).json({ error: "No puedes eliminar tu propio usuario." });
+    }
+    // Verifica existencia
+    const u = await pool.query("SELECT id FROM users WHERE id=$1", [targetId]);
+    if (!u.rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    // Si tiene pedidos, bloquea (409)
+    const o = await pool.query("SELECT COUNT(*)::int AS c FROM orders WHERE user_id=$1", [targetId]);
+    if ((o.rows[0]?.c ?? 0) > 0) {
+      return res.status(409).json({
+        error: `No se puede eliminar: el usuario tiene ${o.rows[0].c} pedido(s) asociados.`,
+      });
+    }
+
+    await pool.query("DELETE FROM users WHERE id=$1", [targetId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /admin/users/:id", err);
+    res.status(500).json({ error: "No se pudo eliminar el usuario" });
+  }
+});
+
+
+
 
 /* ---------- ORDERS (ejemplo que ya tienes) ---------- */
 router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
@@ -72,9 +159,9 @@ router.get("/stats", verifyToken, verifyAdmin, async (_req, res) => {
   }
 });
 
-/* ========== CATEGORIES (ADMIN) — ESTAS SON LAS QUE ROMPÍAN ========== */
+/* ========== CATEGORIES (ADMIN)  ========== */
 
-// GET /admin/categories
+// GET /admin/categories  -> lista
 router.get("/categories", verifyToken, verifyAdmin, async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -87,7 +174,7 @@ router.get("/categories", verifyToken, verifyAdmin, async (_req, res) => {
   }
 });
 
-// PUT /admin/categories/:id
+// PUT /admin/categories/:id  -> editar
 router.put("/categories/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -117,7 +204,7 @@ router.put("/categories/:id", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
-// DELETE /admin/categories/:id?reassignTo=<id>
+// DELETE /admin/categories/:id?reassignTo=<id>  -> eliminar (con reasignación opcional)
 router.delete("/categories/:id", verifyToken, verifyAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const reassignTo = req.query.reassignTo ? parseInt(req.query.reassignTo, 10) : null;

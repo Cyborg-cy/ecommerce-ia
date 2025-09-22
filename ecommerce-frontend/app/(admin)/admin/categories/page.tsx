@@ -6,78 +6,52 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/lib/auth"; 
 
-type Category = {
-  id: number;
-  name: string;
-  description?: string | null;
-};
+type Category = { id: number; name: string; description?: string | null };
 
 export default function AdminCategoriesPage() {
   const [items, setItems] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // edición en línea
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<{ name: string; description: string }>({
-    name: "",
-    description: "",
-  });
+  const [form, setForm] = useState<{ name: string; description: string }>({ name: "", description: "" });
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const DEFAULT_API = "http://localhost:3000";
-const RAW_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  DEFAULT_API;
-
-// si por error viene 3001 (frontend), corrige a 3000 (backend)
-const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
+  const RAW_BASE =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    DEFAULT_API;
+  const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
 
   async function load() {
-  setLoading(true);
-setErr(null);
-try {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    setLoading(true);
+    setErr(null);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-  // 1) Intentar listado admin
-  const urlAdmin = `${base}/admin/categories`;
-  console.log("GET", urlAdmin);
-  let res = await fetch(urlAdmin, { headers, cache: "no-store" });
-
-  // 2) Fallback público si no existe o acceso denegado
-  if (res.status === 404 || res.status === 403) {
-    const urlPub = `${base}/categories`;
-    console.log("GET (fallback)", urlPub);
-    res = await fetch(urlPub, { cache: "no-store" });
+      const url = `${base}/admin/categories`;
+      const res = await fetch(url, { headers, cache: "no-store" });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`GET ${url} → ${res.status} ${txt || ""}`.trim());
+      }
+      const data: Category[] = await res.json();
+      setItems(data ?? []);
+    } catch (e: any) {
+      const msg = e?.message || "No se pudo cargar categorías";
+      setErr(msg);
+      toast.error(msg);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`GET ${res.url} → ${res.status} ${txt || ""}`.trim());
-  }
+  useEffect(() => { load(); }, []);
 
-  const data = await res.json();
-  const arr: Category[] = Array.isArray(data) ? data : (data.items ?? data.rows ?? []);
-  setItems(arr ?? []);
-} catch (e: any) {
-  const msg = e?.message || "No se pudo cargar categorías";
-  setErr(msg);
-  toast.error(msg);
-  setItems([]);
-} finally {
-  setLoading(false);
-}
-
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  // ----- edición en línea -----
   function startEdit(c: Category) {
     setEditingId(c.id);
     setForm({ name: c.name, description: c.description ?? "" });
@@ -87,78 +61,84 @@ try {
     setForm({ name: "", description: "" });
   }
 
-  // ⬇️ Guardar (PUT /categories/:id)
-async function saveEdit(id: number) {
-  if (!form.name.trim()) {
-    toast.error("El nombre es obligatorio");
-    return;
-  }
-  setSaving(true);
-  try {
-    const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
-    const token = localStorage.getItem("token") || "";
-    const res = await fetch(`${base}/categories/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        name: form.name.trim(),
-        description: form.description.trim() || null,
-      }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data?.error || `Error ${res.status}`);
+  async function saveEdit(id: number) {
+    if (!form.name.trim()) {
+      toast.error("El nombre es obligatorio");
+      return;
     }
-    toast.success("Categoría guardada");
-    setEditingId(null);
-    await load();
-  } catch (e: any) {
-    toast.error(e?.message || "Error al guardar");
-  } finally {
-    setSaving(false);
-  }
-}
-
-async function delCategory(id: number) {
-  if (!confirm(`¿Eliminar categoría #${id}?`)) return;
-  try {
-    const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
-    const token = localStorage.getItem("token") || "";
-    let res = await fetch(`${base}/categories/${id}`, {
-      method: "DELETE",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-
-    // Si el backend pide reasignar (409), pedimos el ID destino y repetimos
-    if (res.status === 409) {
-      const data = await res.json().catch(() => ({}));
-      const msg = data?.error || "La categoría tiene productos asociados.";
-      const input = prompt(`${msg}\n\nID de categoría destino:`, "");
-      if (!input) return;
-      const dst = Number.parseInt(input, 10);
-      if (!Number.isInteger(dst) || dst <= 0 || dst === id) {
-        alert("ID de categoría destino inválido.");
-        return;
-      }
-      res = await fetch(`${base}/categories/${id}?reassignTo=${dst}`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    try {
+      setSaving(true);
+      const token = localStorage.getItem("token") || "";
+      const url = `${base}/admin/categories/${id}`;
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+        }),
       });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`PUT ${url} → ${res.status} ${txt || ""}`.trim());
+      }
+      toast.success("Categoría guardada");
+      setEditingId(null);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Error al guardar");
+    } finally {
+      setSaving(false);
     }
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data?.error || `Error ${res.status}`);
-    }
-    toast.success(`Categoría #${id} eliminada`);
-    await load();
-  } catch (e: any) {
-    toast.error(e?.message || "Error al eliminar");
   }
-}
+
+  async function delCategory(id: number) {
+    if (!confirm(`¿Eliminar categoría #${id}?`)) return;
+
+    try {
+      setDeletingId(id);
+      const token = localStorage.getItem("token") || "";
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+
+      // intento directo
+      let url = `${base}/admin/categories/${id}`;
+      let res = await fetch(url, { method: "DELETE", headers });
+
+      // si hay productos asociados, pide reasignación
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({}));
+        const msg = data?.error || "La categoría tiene productos asociados.";
+        const input = prompt(
+          `${msg}\n\nIngresa el ID de otra categoría para reasignar los productos y eliminar:`,
+          ""
+        );
+        if (!input) { setDeletingId(null); return; }
+        const dst = Number.parseInt(input, 10);
+        if (!Number.isInteger(dst) || dst <= 0 || dst === id) {
+          alert("ID de categoría destino inválido.");
+          setDeletingId(null);
+          return;
+        }
+        url = `${base}/admin/categories/${id}?reassignTo=${dst}`;
+        res = await fetch(url, { method: "DELETE", headers });
+      }
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`DELETE ${url} → ${res.status} ${txt || ""}`.trim());
+      }
+
+      toast.success(`Categoría #${id} eliminada`);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Error al eliminar");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <AdminGate>
@@ -191,7 +171,6 @@ async function delCategory(id: number) {
                   return (
                     <tr key={c.id} className="border-t">
                       <td className="p-2 border">{c.id}</td>
-
                       <td className="p-2 border">
                         {isEditing ? (
                           <input
@@ -204,7 +183,6 @@ async function delCategory(id: number) {
                           c.name
                         )}
                       </td>
-
                       <td className="p-2 border">
                         {isEditing ? (
                           <input
@@ -216,9 +194,7 @@ async function delCategory(id: number) {
                           c.description ?? "—"
                         )}
                       </td>
-
                       <td className="p-2 border">
-                        
                         {isEditing ? (
                           <div className="flex gap-2">
                             <button
@@ -228,19 +204,13 @@ async function delCategory(id: number) {
                             >
                               {saving ? "Guardando…" : "Guardar"}
                             </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="px-3 py-1 rounded border text-sm"
-                            >
+                            <button onClick={cancelEdit} className="px-3 py-1 rounded border text-sm">
                               Cancelar
                             </button>
                           </div>
                         ) : (
                           <div className="flex gap-3">
-                            <button
-                              onClick={() => startEdit(c)}
-                              className="underline text-sm"
-                            >
+                            <button onClick={() => startEdit(c)} className="underline text-sm">
                               Editar
                             </button>
                             <button

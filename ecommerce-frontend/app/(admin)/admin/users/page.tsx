@@ -20,12 +20,16 @@ export default function AdminUsersPage() {
   const [err, setErr] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const DEFAULT_API = "http://localhost:3000";
   const RAW_BASE =
     process.env.NEXT_PUBLIC_API_BASE ||
     process.env.NEXT_PUBLIC_API_URL ||
     DEFAULT_API;
+
+    
+  // corrige si accidentalmente apunta a 3001 (front)
   const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
 
   async function load(p = 1) {
@@ -78,24 +82,50 @@ export default function AdminUsersPage() {
         throw new Error(`PATCH ${url} → ${res.status} ${txt || ""}`.trim());
       }
       toast.success(`Rol actualizado a "${nextRole}"`);
-      // Optimista: actualiza en memoria
+      // update optimista
       setItems((arr) =>
         arr.map((x) => (x.id === u.id ? { ...x, role: nextRole } as User : x))
       );
     } catch (e: any) {
+      console.error("toggleRole error", e);
       toast.error(e?.message || "Error al actualizar rol");
     } finally {
       setUpdatingId(null);
     }
   }
 
+  async function deleteUser(u: User) {
+    if (!confirm(`¿Eliminar al usuario ${u.email}? Esta acción no se puede deshacer.`)) return;
+    try {
+      setDeletingId(u.id);
+      const token = localStorage.getItem("token") || "";
+      const url = `${base}/admin/users/${u.id}`;
+      const res = await fetch(url, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "El usuario tiene pedidos asociados.");
+      }
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`DELETE ${url} → ${res.status} ${txt || ""}`.trim());
+      }
+      toast.success("Usuario eliminado");
+      setItems((arr) => arr.filter((x) => x.id !== u.id));
+    } catch (e: any) {
+      console.error("deleteUser error", e);
+      toast.error(e?.message || "No se pudo eliminar");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <AdminGate>
       <div className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Usuarios</h1>
-          {/* si quieres filtros/búsqueda, los agregamos luego */}
-        </div>
+        <h1 className="text-2xl font-bold">Usuarios</h1>
 
         {loading ? (
           <p>Cargando…</p>
@@ -103,7 +133,7 @@ export default function AdminUsersPage() {
           <p className="text-red-600 text-sm">{err}</p>
         ) : (
           <div className="overflow-auto">
-            <table className="min-w-[800px] w-full border">
+            <table className="min-w-[900px] w-full border">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="p-2 border text-left">ID</th>
@@ -121,17 +151,26 @@ export default function AdminUsersPage() {
                     <td className="p-2 border">{u.email}</td>
                     <td className="p-2 border">{u.role}</td>
                     <td className="p-2 border">
-                      <button
-                        onClick={() => toggleRole(u)}
-                        disabled={updatingId === u.id}
-                        className="underline text-sm disabled:opacity-60"
-                      >
-                        {updatingId === u.id
-                          ? "Actualizando…"
-                          : u.role === "admin"
-                          ? "Bajar a user"
-                          : "Elevar a admin"}
-                      </button>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => toggleRole(u)}
+                          disabled={updatingId === u.id}
+                          className="underline text-sm disabled:opacity-60"
+                        >
+                          {updatingId === u.id
+                            ? "Actualizando…"
+                            : u.role === "admin"
+                            ? "Bajar a user"
+                            : "Elevar a admin"}
+                        </button>
+                        <button
+                          onClick={() => deleteUser(u)}
+                          disabled={deletingId === u.id}
+                          className="underline text-sm text-red-600 disabled:opacity-60"
+                        >
+                          {deletingId === u.id ? "Eliminando…" : "Eliminar"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -145,7 +184,7 @@ export default function AdminUsersPage() {
               </tbody>
             </table>
 
-            {/* paginita simple; si no la necesitas, la quitamos */}
+            {/* paginación simple */}
             <div className="flex items-center gap-2 mt-3">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}

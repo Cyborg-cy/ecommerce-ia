@@ -30,9 +30,11 @@ app.use("/payments/webhook", stripeWebhookRouter);
 app.use(
   cors({
     origin: ["http://localhost:3000", "http://localhost:3001"],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], // 👈 agrega PATCH
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   })
 );
 
@@ -58,12 +60,6 @@ if (missing.length) {
   console.warn("⚠️ Faltan variables .env:", missing.join(", "));
 }
 
-// LOG de rutas (debug) — ponlo antes de montar routers
-app.use((req, _res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  next();
-});
-
 
 // 5) Rutas
 app.use("/auth", authRouter);
@@ -77,14 +73,11 @@ app.use("/admin", adminRouter);
 app.use("/stats", statsRouter);
 app.use("/recommendations", recommendationsRouter);
 
+
 app.get("/", (_req, res) => {
   res.json({ message: "🚀 API E-commerce funcionando correctamente" });
 });
 
-// SONDA: prueba rápida de que DELETE /categories/:id entra al server
-app.delete("/categories/:id/__probe", (req, res) => {
-  res.json({ ok: true, seen: req.params.id, path: req.originalUrl });
-});
 
 // 404
 app.use((req, res) => {
