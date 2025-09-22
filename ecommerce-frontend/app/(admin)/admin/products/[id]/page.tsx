@@ -4,232 +4,278 @@ import AdminGate from "@/components/AdminGate";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import toast from "react-hot-toast";
-
-function sanitizePrice(v: string) {
-  let s = v.replace(/[+\-eE]/g, "").replace(",", ".");
-  const parts = s.split(".");
-  if (parts.length > 2) s = parts[0] + "." + parts.slice(1).join("");
-  return s.replace(/[^0-9.]/g, "");
-}
-function sanitizeInt(v: string) {
-  return v.replace(/[^\d]/g, "");
-}
+import Link from "next/link";
 
 type Product = {
   id: number;
   name: string;
-  description: string | null;
+  description?: string | null;
   price: number;
   stock: number;
-  category_id: number | null;
+  category_id?: number | null;
+  image_url?: string | null;
 };
 
+type Category = { id: number; name: string };
+
 export default function AdminEditProductPage() {
+  const { id } = useParams<{ id: string }>();
   const r = useRouter();
-  const params = useParams<{ id: string }>();
-  const pid = Number(params?.id);
+  const pid = Number.parseInt(String(id ?? ""), 10);
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const [cats, setCats] = useState<Category[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const [f, setF] = useState({
     name: "",
     description: "",
-    price: "",
-    stock: "0",
-    category_id: "",
+    price: "", // usar string para controlar input
+    stock: "",
+    category_id: "", // "" = sin categoría
+    image_url: "",
   });
 
+  const DEFAULT_API = "http://localhost:3000";
+  const RAW_BASE =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    DEFAULT_API;
+  const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
+
+  function onChange<K extends keyof typeof f>(k: K, v: string) {
+    setF((prev) => ({ ...prev, [k]: v }));
+  }
+
   useEffect(() => {
-    if (!Number.isFinite(pid)) {
+    if (!Number.isInteger(pid) || pid <= 0) {
       setErr("ID inválido");
       setLoading(false);
       return;
     }
+    let alive = true;
+
     (async () => {
       try {
         setLoading(true);
-        const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
-        const res = await fetch(`${base}/products/${pid}`, { cache: "no-store" });
-        if (res.status === 404) { setNotFound(true); return; }
-        if (!res.ok) throw new Error("No se pudo cargar el producto");
-        const p: Product = await res.json();
-        setF({
-          name: p.name ?? "",
-          description: p.description ?? "",
-          price: String(p.price ?? ""),
-          stock: String(p.stock ?? "0"),
-          category_id: p.category_id ? String(p.category_id) : "",
+        setErr(null);
+
+        // Cargar producto
+        const prodRes = await fetch(`${base}/products/${pid}`, { cache: "no-store" });
+        if (prodRes.status === 404) throw new Error("Producto no encontrado");
+        if (!prodRes.ok) {
+          const txt = await prodRes.text();
+          throw new Error(`GET /products/${pid} → ${prodRes.status} ${txt || ""}`);
+        }
+        const p: Product = await prodRes.json();
+
+        // Cargar categorías para el select (admin)
+        const token = localStorage.getItem("token") || "";
+        const catRes = await fetch(`${base}/admin/categories`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          cache: "no-store",
         });
+        if (catRes.ok) {
+          const list: Category[] = await catRes.json();
+          if (alive) setCats(list ?? []);
+        } else {
+          // si falla, dejamos el select solo con "Sin categoría"
+          if (alive) setCats([]);
+        }
+
+        if (alive) {
+          setF({
+            name: p.name || "",
+            description: (p.description ?? "") || "",
+            price: String(typeof p.price === "number" ? p.price : Number(p.price ?? 0)),
+            stock: String(typeof p.stock === "number" ? p.stock : Number(p.stock ?? 0)),
+            category_id: p.category_id ? String(p.category_id) : "",
+            image_url: (p.image_url ?? "") || "",
+          });
+        }
       } catch (e: any) {
-        setErr(e?.message || "Error al cargar");
+        if (!alive) return;
+        setErr(e?.message || "No se pudo cargar el producto");
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
-  }, [pid]);
+
+    return () => {
+      alive = false;
+    };
+  }, [pid, base]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    setErr(null);
 
-    const priceNum = Number((f.price || "").replace(",", "."));
-    const stockNum = Number.parseInt(f.stock || "0", 10);
-    const catNum = f.category_id ? Number.parseInt(f.category_id, 10) : null;
-
-    if (!f.name.trim()) return setErr("El nombre es obligatorio.");
-    if (!Number.isFinite(priceNum) || priceNum <= 0)
-      return setErr("Precio inválido: debe ser un número > 0.");
-    if (!Number.isInteger(stockNum) || stockNum < 0)
-      return setErr("Stock inválido: debe ser un entero ≥ 0.");
-    if (catNum !== null && (!Number.isInteger(catNum) || catNum <= 0))
-      return setErr("Categoría inválida: entero positivo o vacío.");
+    // Validación básica cliente
+    if (!f.name.trim()) return toast.error("El nombre es obligatorio");
+    const priceNum = Number(f.price);
+    const stockNum = Number(f.stock);
+    if (!Number.isFinite(priceNum) || priceNum <= 0) return toast.error("Precio inválido (> 0)");
+    if (!Number.isInteger(stockNum) || stockNum < 0) return toast.error("Stock inválido (entero ≥ 0)");
 
     try {
       setSaving(true);
-      const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
       const token = localStorage.getItem("token") || "";
+
+      const body: any = {
+        name: f.name.trim(),
+        description: f.description.trim() || null,
+        price: priceNum,
+        stock: stockNum,
+        image_url: f.image_url.trim() || null,
+      };
+      if (f.category_id) body.category_id = Number(f.category_id); // si está vacío, no lo envíes
+
       const res = await fetch(`${base}/products/${pid}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          name: f.name,
-          description: f.description || null,
-          price: priceNum,
-          stock: stockNum,
-          category_id: catNum,
-        }),
+        body: JSON.stringify(body),
       });
-      if (res.status === 404) { setNotFound(true); return; }
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || "No se pudo guardar");
+        const txt = await res.text();
+        throw new Error(`PUT /products/${pid} → ${res.status} ${txt || ""}`);
       }
+
       toast.success("Producto guardado");
-r.push("/admin/products");
+      r.push("/admin/products");
     } catch (e: any) {
-      toast.error(e?.message || "Error al guardar");
+      toast.error(e?.message || "No se pudo guardar");
     } finally {
-      setSaving(false);
+      setSaving(false); // sin texto "Guardando…", solo deshabilitar
     }
+  }
+
+  if (loading) {
+    return (
+      <AdminGate>
+        <div className="p-6">Cargando…</div>
+      </AdminGate>
+    );
   }
 
   return (
     <AdminGate>
-      <div className="p-6 max-w-xl">
-        <a href="/admin/products" className="underline text-sm">← Volver</a>
+      <div className="p-6 max-w-2xl">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Editar producto #{pid}</h1>
+          <Link href="/admin/products" className="underline text-sm">← Volver</Link>
+        </div>
 
-        {loading ? (
-          <div className="mt-4">Cargando…</div>
-        ) : notFound ? (
-          <div className="mt-4 text-red-600">Producto no encontrado.</div>
+        {err ? (
+          <p className="text-red-600 mt-4">{err}</p>
         ) : (
-          <>
-            <h1 className="text-2xl font-bold mt-3">Editar producto #{pid}</h1>
+          <form onSubmit={save} className="space-y-4 mt-6">
+            <div>
+              <label className="block text-sm">Nombre</label>
+              <input
+                className="border rounded px-3 py-2 w-full"
+                value={f.name}
+                onChange={(e) => onChange("name", e.target.value)}
+                required
+                autoComplete="off"
+              />
+            </div>
 
-            <form onSubmit={save} className="space-y-4 mt-4">
+            <div>
+              <label className="block text-sm">Descripción (opcional)</label>
+              <textarea
+                className="border rounded px-3 py-2 w-full"
+                value={f.description}
+                onChange={(e) => onChange("description", e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm">Nombre</label>
+                <label className="block text-sm">Precio</label>
                 <input
+                  inputMode="decimal"
                   className="border rounded px-3 py-2 w-full"
-                  value={f.name}
-                  onChange={(e) => setF({ ...f, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm">Descripción</label>
-                <textarea
-                  className="border rounded px-3 py-2 w-full"
-                  value={f.description}
-                  onChange={(e) => setF({ ...f, description: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm">Precio</label>
-                  <input
-                    type="text"           // 👈 sin flechitas
-                    inputMode="decimal"
-                    pattern="[0-9]*[.,]?[0-9]*"
-                    className="border rounded px-3 py-2 w-full"
-                    value={f.price}
-                    onChange={(e) => setF({ ...f, price: sanitizePrice(e.target.value) })}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const s = sanitizePrice(e.clipboardData.getData("text"));
-                      setF((x) => ({ ...x, price: s }));
-                    }}
-                    onBlur={() => {
-                      const n = Number((f.price || "").replace(",", "."));
-                      if (!Number.isFinite(n) || n <= 0) {
-                        setF((x) => ({ ...x, price: "0.01" }));
-                      } else {
-                        setF((x) => ({ ...x, price: String(Number(n.toFixed(2))) }));
-                      }
-                    }}
-                    placeholder="0.01"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm">Stock</label>
-                  <input
-                    type="text"           // 👈 sin flechitas
-                    inputMode="numeric"
-                    pattern="\d*"
-                    className="border rounded px-3 py-2 w-full"
-                    value={f.stock}
-                    onChange={(e) => setF({ ...f, stock: sanitizeInt(e.target.value) })}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const s = sanitizeInt(e.clipboardData.getData("text"));
-                      setF((x) => ({ ...x, stock: s || "0" }));
-                    }}
-                    onBlur={() => {
-                      const n = Number.parseInt(f.stock || "0", 10);
-                      setF((x) => ({ ...x, stock: String(Number.isFinite(n) && n >= 0 ? n : 0) }));
-                    }}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm">Categoría (ID)</label>
-                <input
-                  type="text"           // 👈 sin flechitas
-                  inputMode="numeric"
-                  pattern="\d*"
-                  className="border rounded px-3 py-2 w-full"
-                  value={f.category_id}
-                  onChange={(e) => setF({ ...f, category_id: sanitizeInt(e.target.value) })}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const s = sanitizeInt(e.clipboardData.getData("text"));
-                    setF((x) => ({ ...x, category_id: s }));
+                  value={f.price}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^\d.]/g, "");
+                    onChange("price", v);
                   }}
-                  placeholder="Opcional"
+                  placeholder="0.00"
                 />
               </div>
+              <div>
+                <label className="block text-sm">Stock</label>
+                <input
+                  inputMode="numeric"
+                  className="border rounded px-3 py-2 w-full"
+                  value={f.stock}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^\d]/g, "");
+                    onChange("stock", v);
+                  }}
+                  placeholder="0"
+                />
+              </div>
+            </div>
 
-              {err && <p className="text-red-600 text-sm">{err}</p>}
-
-              <button
-                disabled={saving}
-                className="bg-black text-white rounded px-4 py-2 disabled:opacity-60"
+            <div>
+              <label className="block text-sm">Categoría (opcional)</label>
+              <select
+                className="border rounded px-3 py-2 w-full"
+                value={f.category_id}
+                onChange={(e) => onChange("category_id", e.target.value)}
               >
-                {saving ? "Guardando…" : "Guardar"}
-              </button>
-            </form>
-          </>
+                <option value="">Sin categoría</option>
+                {cats.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} (#{c.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm">Imagen (URL, opcional)</label>
+              <input
+                className="border rounded px-3 py-2 w-full"
+                value={f.image_url}
+                onChange={(e) => onChange("image_url", e.target.value)}
+                placeholder="https://…/imagen.jpg"
+                autoComplete="off"
+              />
+              {f.image_url.trim() ? (
+                <div className="mt-2">
+                  <img
+                    src={f.image_url}
+                    alt="preview"
+                    className="max-h-48 rounded border"
+                    onError={(ev) => ((ev.currentTarget.style.display = "none"))}
+                  />
+                </div>
+              ) : null}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="text-xs underline"
+                  onClick={() => onChange("image_url", "")}
+                >
+                  Quitar imagen
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-black text-white rounded px-4 py-2 disabled:opacity-60"
+            >
+              Guardar
+            </button>
+          </form>
         )}
       </div>
     </AdminGate>

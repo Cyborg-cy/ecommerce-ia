@@ -174,6 +174,30 @@ router.get("/categories", verifyToken, verifyAdmin, async (_req, res) => {
   }
 });
 
+// POST /admin/categories  (crear categoría)
+router.post("/categories", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    let { name, description } = req.body || {};
+    name = (name || "").trim();
+    if (!name) return res.status(400).json({ error: "El nombre es obligatorio" });
+    description =
+      description === undefined || description === null
+        ? null
+        : String(description).trim() || null;
+
+    const { rows } = await pool.query(
+      `INSERT INTO categories (name, description)
+       VALUES ($1, $2)
+       RETURNING id, name, description`,
+      [name, description]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("POST /admin/categories", err);
+    res.status(500).json({ error: "No se pudo crear la categoría" });
+  }
+});
+
 // PUT /admin/categories/:id  -> editar
 router.put("/categories/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {

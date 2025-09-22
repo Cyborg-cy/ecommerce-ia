@@ -3,14 +3,13 @@ import { api } from "@/lib/api";
 import BuyBox from "@/components/BuyBox";
 import Recommendations from "@/components/Recommendations";
 
-
-
 type Product = {
   id: number;
   name: string;
   description?: string | null;
   price: number | string;
   stock?: number | null;
+  image_url?: string | null;
 };
 
 async function getProduct(id: string) {
@@ -20,9 +19,8 @@ async function getProduct(id: string) {
   }
   try {
     const { data } = await api.get(`/products/${pid}`);
-    return data;
+    return data as Product;
   } catch (e: any) {
-    // Log más explícito para depurar
     console.error("GET /products/:id error", {
       status: e?.response?.status,
       data: e?.response?.data,
@@ -36,21 +34,50 @@ export default async function ProductDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;         // 👈 importante en Next 15
-  const product = await getProduct(id);
-  if (!product) return <p>Producto no encontrado</p>;
+  const { id } = await params; // Next 15
+  const p = await getProduct(id);
+  if (!p) return <p>Producto no encontrado</p>;
+
+  const price =
+    typeof p.price === "number" ? p.price.toFixed(2) : String(p.price ?? "");
 
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold">{product.name}</h1>
-      {product.description && <p>{product.description}</p>}
-      <p className="text-xl font-semibold">
-        ${typeof product.price === "string" ? product.price : product.price.toFixed(2)}
-      </p>
+    <div className="max-w-5xl mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Imagen */}
+      <div className="bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden min-h-[260px]">
+        {p.image_url ? (
+          <img
+            src={p.image_url}
+            alt={p.name}
+            className="max-h-[460px] w-auto object-contain"
+            onError={(ev) => {
+              (ev.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : (
+          <span className="text-gray-400 text-sm">Sin imagen</span>
+        )}
+      </div>
 
-      {/* Caja cliente con input + botón */}
-      <BuyBox productId={Number(id)} />
-      <Recommendations productId={product.id} />
+      {/* Info */}
+      <div>
+        <h1 className="text-3xl font-bold">{p.name}</h1>
+        {p.description && (
+          <p className="text-gray-300 md:text-gray-600 mt-3">{p.description}</p>
+        )}
+
+        <p className="text-2xl font-semibold mt-5">${price}</p>
+
+        {/* Caja de compra (cliente) */}
+        <div className="mt-4">
+          <BuyBox productId={Number(id)} />
+        </div>
+
+        {/* Recomendaciones */}
+        <div className="mt-8">
+          <Recommendations productId={p.id} />
+        </div>
+      </div>
     </div>
   );
 }
