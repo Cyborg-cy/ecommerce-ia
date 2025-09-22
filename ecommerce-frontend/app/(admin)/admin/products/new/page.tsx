@@ -1,183 +1,210 @@
 "use client";
 
 import AdminGate from "@/components/AdminGate";
-import { useState } from "react";
+import { useEffect, useState } from "react"; 
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import Link from "next/link";
 
-function sanitizePrice(v: string) {
-  // Sólo dígitos y UN punto; coma→punto; sin signos
-  let s = v.replace(/[+\-eE]/g, "").replace(",", ".");
-  const parts = s.split(".");
-  if (parts.length > 2) s = parts[0] + "." + parts.slice(1).join("");
-  return s.replace(/[^0-9.]/g, "");
-}
-function sanitizeInt(v: string) {
-  return v.replace(/[^\d]/g, ""); // sólo dígitos (enteros)
-}
+type Category = { id: number; name: string };
 
 export default function AdminNewProductPage() {
-  const r = useRouter();
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [cats, setCats] = useState<Category[]>([]);
+  const [loadingCats, setLoadingCats] = useState(true);
 
   const [f, setF] = useState({
     name: "",
     description: "",
-    price: "",       // <— TEXT, sin flechitas
-    stock: "0",      // <— TEXT, sólo enteros
-    category_id: "", // <— TEXT, sólo enteros
+    price: "",
+    stock: "",
+    category_id: "", // string para poder tener "" (sin categoría)
+    image_url: "",
   });
+  
+  
+  const [saving, setSaving] = useState(false);
 
-  async function createProduct(e: React.FormEvent) {
+  const DEFAULT_API = "http://localhost:3000";
+  const RAW_BASE =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    DEFAULT_API;
+  const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoadingCats(true);
+        const token = localStorage.getItem("token") || "";
+        const res = await fetch(`${base}/admin/categories`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(`No se pudieron cargar categorías (${res.status})`);
+        const data: Category[] = await res.json();
+        setCats(data || []);
+      } catch (e: any) {
+        toast.error(e?.message || "Error cargando categorías");
+        setCats([]);
+      } finally {
+        setLoadingCats(false);
+      }
+    })();
+  }, [base]);
+
+  function onChange<K extends keyof typeof f>(key: K, val: string) {
+    setF(prev => ({ ...prev, [key]: val }));
+  }
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setErr(null);
 
-    const priceNum = Number((f.price || "").replace(",", "."));
-    const stockNum = Number.parseInt(f.stock || "0", 10);
-    const catNum   = f.category_id ? Number.parseInt(f.category_id, 10) : null;
-
-    if (!f.name.trim()) return setErr("El nombre es obligatorio.");
-    if (!Number.isFinite(priceNum) || priceNum <= 0)
-      return setErr("Precio inválido: debe ser > 0.");
-    if (!Number.isInteger(stockNum) || stockNum < 0)
-      return setErr("Stock inválido: entero ≥ 0.");
-    if (catNum !== null && (!Number.isInteger(catNum) || catNum <= 0))
-      return setErr("Categoría inválida: entero positivo o vacío.");
+    // Validaciones mínimas en cliente
+    if (!f.name.trim()) return toast.error("El nombre es obligatorio");
+    const priceNum = Number(f.price);
+    const stockNum = Number(f.stock);
+    if (!Number.isFinite(priceNum) || priceNum <= 0)  return toast.error("Precio inválido (> 0)");
+    if (!Number.isInteger(stockNum) || stockNum < 0)  return toast.error("Stock inválido (entero ≥ 0)");
 
     try {
       setSaving(true);
-      const base  = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
       const token = localStorage.getItem("token") || "";
+      const body = {
+        name: f.name.trim(),
+        description: f.description.trim() || null,
+        price: priceNum,
+        stock: stockNum,
+        // "" → null
+        category_id: f.category_id ? Number(f.category_id) : null,
+        image_url: f.image_url.trim() || null,
+      };
+
       const res = await fetch(`${base}/products`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          name: f.name,
-          description: f.description || null,
-          price: priceNum,
-          stock: stockNum,
-          category_id: catNum,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-  const data = await res.json().catch(() => ({}));
-  throw new Error(data?.error || "No se pudo crear el producto");
-}
-    toast.success("Producto creado");
-r.push("/admin/products");
+        const txt = await res.text();
+        throw new Error(`Error al crear (${res.status}) ${txt || ""}`);
+      }
+
+      toast.success("Producto creado");
+      // Limpia el form
+      setF({ name: "", description: "", price: "", stock: "", category_id: "", image_url: "" });
     } catch (e: any) {
-  toast.error(e?.message || "Error al crear producto");
-  setErr(e?.message || "Error al crear producto");
-}
+      toast.error(e?.message || "No se pudo crear el producto");
+    } finally {
+      setSaving(false); // botón vuelve a estar habilitado
+    }
   }
 
   return (
     <AdminGate>
-      <div className="p-6 max-w-xl">
-        <a href="/admin/products" className="underline text-sm">← Volver</a>
-        <h1 className="text-2xl font-bold mt-3">Nuevo producto</h1>
+      <div className="p-6 max-w-2xl">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Nuevo producto</h1>
+          <Link href="/admin/products" className="underline text-sm">← Volver</Link>
+        </div>
 
-        <form onSubmit={createProduct} className="space-y-4 mt-4">
+        <form onSubmit={submit} className="space-y-4 mt-4">
           <div>
             <label className="block text-sm">Nombre</label>
             <input
               className="border rounded px-3 py-2 w-full"
               value={f.name}
-              onChange={(e) => setF({ ...f, name: e.target.value })}
+              onChange={(e) => onChange("name", e.target.value)}
               required
               autoComplete="off"
             />
           </div>
 
           <div>
-            <label className="block text-sm">Descripción</label>
+            <label className="block text-sm">Descripción (opcional)</label>
             <textarea
               className="border rounded px-3 py-2 w-full"
               value={f.description}
-              onChange={(e) => setF({ ...f, description: e.target.value })}
-              autoComplete="off"
+              onChange={(e) => onChange("description", e.target.value)}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm">Precio</label>
               <input
-                type="text"                // ← TEXT (no number)
                 inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-                className="border rounded px-3 py-2 w-full appearance-none"
+                className="border rounded px-3 py-2 w-full"
                 value={f.price}
-                onChange={(e) => setF({ ...f, price: sanitizePrice(e.target.value) })}
-                onPaste={(e) => {
-                  e.preventDefault();
-                  const s = sanitizePrice(e.clipboardData.getData("text"));
-                  setF((x) => ({ ...x, price: s }));
+                onChange={(e) => {
+                  // solo números + punto, sin negativos
+                  const v = e.target.value.replace(/[^\d.]/g, "");
+                  onChange("price", v);
                 }}
-                onBlur={() => {
-                  const n = Number((f.price || "").replace(",", "."));
-                  if (!Number.isFinite(n) || n <= 0) {
-                    setF((x) => ({ ...x, price: "0.01" }));
-                  } else {
-                    setF((x) => ({ ...x, price: String(Number(n.toFixed(2))) }));
-                  }
-                }}
-                placeholder="0.01"
-                autoComplete="off"
-                required
+                placeholder="0.00"
               />
             </div>
             <div>
               <label className="block text-sm">Stock</label>
               <input
-                type="text"                // ← TEXT (no number)
                 inputMode="numeric"
-                pattern="\d*"
-                className="border rounded px-3 py-2 w-full appearance-none"
+                className="border rounded px-3 py-2 w-full"
                 value={f.stock}
-                onChange={(e) => setF({ ...f, stock: sanitizeInt(e.target.value) })}
-                onPaste={(e) => {
-                  e.preventDefault();
-                  const s = sanitizeInt(e.clipboardData.getData("text"));
-                  setF((x) => ({ ...x, stock: s || "0" }));
-                }}
-                onBlur={() => {
-                  const n = Number.parseInt(f.stock || "0", 10);
-                  setF((x) => ({ ...x, stock: String(Number.isFinite(n) && n >= 0 ? n : 0) }));
+                onChange={(e) => {
+                  // solo enteros ≥ 0
+                  const v = e.target.value.replace(/[^\d]/g, "");
+                  onChange("stock", v);
                 }}
                 placeholder="0"
-                autoComplete="off"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm">Categoría (ID)</label>
-            <input
-              type="text"                // ← TEXT (no number)
-              inputMode="numeric"
-              pattern="\d*"
-              className="border rounded px-3 py-2 w-full appearance-none"
+            <label className="block text-sm">Categoría (opcional)</label>
+            <select
+              className="border rounded px-3 py-2 w-full"
               value={f.category_id}
-              onChange={(e) => setF({ ...f, category_id: sanitizeInt(e.target.value) })}
-              onPaste={(e) => {
-                e.preventDefault();
-                const s = sanitizeInt(e.clipboardData.getData("text"));
-                setF((x) => ({ ...x, category_id: s }));
-              }}
-              placeholder="Opcional"
-              autoComplete="off"
-            />
+              onChange={(e) => onChange("category_id", e.target.value)}
+              disabled={loadingCats}
+            >
+              <option value="">Sin categoría</option>
+              {cats.map(c => (
+                <option key={c.id} value={c.id}>{c.name} (#{c.id})</option>
+              ))}
+            </select>
           </div>
 
-          {err && <p className="text-red-600 text-sm">{err}</p>}
+          <div>
+            <label className="block text-sm">Imagen (URL, opcional)</label>
+            <input
+              className="border rounded px-3 py-2 w-full"
+              value={f.image_url}
+              onChange={(e) => onChange("image_url", e.target.value)}
+              placeholder="https://…/imagen.jpg"
+              autoComplete="off"
+            />
+            {f.image_url.trim() && (
+              <div className="mt-2">
+                {/* preview simple */}
+                <img
+                  src={f.image_url}
+                  alt="preview"
+                  className="max-h-40 rounded border"
+                  onError={(ev) => ((ev.currentTarget.style.display = "none"))}
+                />
+              </div>
+            )}
+          </div>
 
           <button
+            type="submit"
             disabled={saving}
             className="bg-black text-white rounded px-4 py-2 disabled:opacity-60"
           >
-            {saving ? "Guardando…" : "Crear"}
+            Crear
           </button>
         </form>
       </div>

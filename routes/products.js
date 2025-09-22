@@ -221,40 +221,42 @@ router.get("/recommendations/:id", async (req, res) => {
    ============================================ */
 router.post("/", verifyToken, verifyAdmin, validate(createProductSchema), async (req, res) => {
   try {
-    let { name, description, price, stock, category_id } = req.body;
+    let { name, description, price, stock, category_id, image_url } = req.body;
 
-    if (!name || price === undefined || stock === undefined || !category_id) {
+    if (!name || price === undefined || stock === undefined) {
       return res.status(400).json({
-        error: "Faltan datos: name, price, stock, category_id",
+        error: "Faltan datos: name, price, stock (category_id es opcional)",
       });
     }
 
     price = Number(price);
     stock = parseInt(stock, 10);
-    category_id = parseInt(category_id, 10);
-
-    if (Number.isNaN(price) || Number.isNaN(stock) || Number.isNaN(category_id)) {
-      return res.status(400).json({
-        error: "Tipos inválidos: price, stock y category_id deben ser numéricos",
-      });
-    }
-    if (price <= 0) {
-      return res.status(400).json({ error: "price debe ser > 0" });
-    }
-    if (stock < 0) {
-      return res.status(400).json({ error: "stock no puede ser negativo" });
+    // category_id opcional
+    if (category_id === "" || category_id === undefined || category_id === null) {
+      category_id = null;
+    } else {
+      category_id = parseInt(category_id, 10);
     }
 
-    const cat = await pool.query("SELECT id FROM categories WHERE id=$1", [category_id]);
-    if (!cat.rows.length) {
-      return res.status(400).json({ error: `La categoría ${category_id} no existe` });
+    if (Number.isNaN(price) || Number.isNaN(stock)) {
+      return res.status(400).json({ error: "Tipos inválidos: price y stock deben ser numéricos" });
+    }
+    if (price <= 0)   return res.status(400).json({ error: "price debe ser > 0" });
+    if (stock < 0)    return res.status(400).json({ error: "stock no puede ser negativo" });
+
+    // Si trae category_id, verifica que exista
+    if (category_id !== null) {
+      const cat = await pool.query("SELECT id FROM categories WHERE id=$1", [category_id]);
+      if (!cat.rows.length) {
+        return res.status(400).json({ error: `La categoría ${category_id} no existe` });
+      }
     }
 
     const result = await pool.query(
-      `INSERT INTO products (name, description, price, stock, category_id)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, description, price::numeric::float8 AS price, stock, created_at, category_id`,
-      [name, description || null, price, stock, category_id]
+      `INSERT INTO products (name, description, price, stock, category_id, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, name, description, price::numeric::float8 AS price, stock, category_id, image_url, created_at`,
+      [name.trim(), (description || null), price, stock, category_id, (image_url?.trim() || null)]
     );
 
     res.status(201).json(result.rows[0]);
@@ -263,6 +265,8 @@ router.post("/", verifyToken, verifyAdmin, validate(createProductSchema), async 
     res.status(500).json({ error: "Error al crear producto" });
   }
 });
+
+
 
 router.put("/:id", verifyToken, verifyAdmin, validate(updateProductSchema), async (req, res) => {
   const { id } = req.params;

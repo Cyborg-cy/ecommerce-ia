@@ -5,11 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
-type Category = {
-  id: number;
-  name: string;
-  description?: string | null;
-};
+type Category = { id: number; name: string; description?: string | null };
 
 export default function AdminEditCategoryPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,14 +14,10 @@ export default function AdminEditCategoryPage() {
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [f, setF] = useState<{ name: string; description: string }>({
-    name: "",
-    description: "",
-  });
+  const [f, setF] = useState<{ name: string; description: string }>({ name: "", description: "" });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Asegura que el BASE sea backend:3000
   const DEFAULT_API = "http://localhost:3000";
   const RAW_BASE =
     process.env.NEXT_PUBLIC_API_BASE ||
@@ -44,14 +36,15 @@ export default function AdminEditCategoryPage() {
       try {
         setErr(null);
         setLoading(true);
-
-        const url = `${base}/categories/${cid}`;
-        const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(`GET ${url} → ${res.status} ${txt || ""}`.trim());
-        }
-        const c: Category = await res.json();
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(`${base}/admin/categories`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("No se pudo cargar categorías");
+        const list: Category[] = await res.json();
+        const c = list.find((x) => x.id === cid);
+        if (!c) throw new Error("Categoría no encontrada");
         if (!alive) return;
         setF({ name: c.name, description: c.description ?? "" });
       } catch (e: any) {
@@ -66,15 +59,11 @@ export default function AdminEditCategoryPage() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!f.name.trim()) {
-      setErr("El nombre es obligatorio.");
-      return;
-    }
+    if (!f.name.trim()) { setErr("El nombre es obligatorio."); return; }
     try {
       setSaving(true);
       const token = localStorage.getItem("token") || "";
-      const url = `${base}/categories/${cid}`;
-      const res = await fetch(url, {
+      const res = await fetch(`${base}/admin/categories/${cid}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -87,7 +76,7 @@ export default function AdminEditCategoryPage() {
       });
       if (!res.ok) {
         const txt = await res.text();
-        throw new Error(`PUT ${url} → ${res.status} ${txt || ""}`.trim());
+        throw new Error(`PUT /admin/categories/${cid} → ${res.status} ${txt || ""}`.trim());
       }
       toast.success("Categoría guardada");
       r.push("/admin/categories");
@@ -106,10 +95,9 @@ export default function AdminEditCategoryPage() {
       const token = localStorage.getItem("token") || "";
       const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-      const baseUrl = `${base}/categories/${cid}`;
-      let res = await fetch(baseUrl, { method: "DELETE", headers });
+      let url = `${base}/admin/categories/${cid}`;
+      let res = await fetch(url, { method: "DELETE", headers });
 
-      // Si hay productos asociados, backend devuelve 409 → pedir reassignTo
       if (res.status === 409) {
         const data = await res.json().catch(() => ({}));
         const msg = data?.error || "La categoría tiene productos asociados.";
@@ -124,15 +112,13 @@ export default function AdminEditCategoryPage() {
           setDeleting(false);
           return;
         }
-        res = await fetch(`${baseUrl}?reassignTo=${dst}`, {
-          method: "DELETE",
-          headers,
-        });
+        url = `${base}/admin/categories/${cid}?reassignTo=${dst}`;
+        res = await fetch(url, { method: "DELETE", headers });
       }
 
       if (!res.ok) {
         const txt = await res.text();
-        throw new Error(`DELETE ${res.url} → ${res.status} ${txt || ""}`.trim());
+        throw new Error(`DELETE ${url} → ${res.status} ${txt || ""}`.trim());
       }
 
       toast.success(`Categoría #${cid} eliminada`);
@@ -146,9 +132,7 @@ export default function AdminEditCategoryPage() {
 
   if (loading)
     return (
-      <AdminGate>
-        <div className="p-6">Cargando…</div>
-      </AdminGate>
+      <AdminGate><div className="p-6">Cargando…</div></AdminGate>
     );
 
   return (
