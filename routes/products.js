@@ -65,18 +65,27 @@ router.get("/", async (req, res) => {
     const total = countRows[0]?.total ?? 0;
 
     // 5) Query paginada
-    params.push(limit);
-    params.push(offset);
-    const listSQL = `
-      SELECT p.id, p.name, p.description, p.price, p.stock, p.created_at,
-             c.id AS category_id, c.name AS category_name
-      FROM products p
-      LEFT JOIN categories c ON c.id = p.category_id
-      ${whereSQL}
-      ORDER BY ${orderSQL}
-      LIMIT $${params.length - 1} OFFSET $${params.length}
-    `;
-    const { rows } = await pool.query(listSQL, params);
+   params.push(limit);
+params.push(offset);
+const listSQL = `
+  SELECT
+    p.id,
+    p.name,
+    p.description,
+    p.price::numeric::float8 AS price,
+    p.stock,
+    p.image_url,
+    p.created_at,
+    c.id   AS category_id,
+    c.name AS category_name
+  FROM products p
+  LEFT JOIN categories c ON c.id = p.category_id
+  ${whereSQL}
+  ORDER BY ${orderSQL}
+  LIMIT $${params.length - 1} OFFSET $${params.length}
+`;
+const { rows } = await pool.query(listSQL, params);
+
 
     res.json({
       items: rows,
@@ -99,31 +108,31 @@ router.get("/", async (req, res) => {
    GET /products/:id  (público)
    ============================== */
 router.get("/:id", async (req, res) => {
-  const { id } = req.params;
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "ID inválido" });
+  }
   try {
-    const result = await pool.query(
-      `SELECT p.id,
-              p.name,
-              p.description,
-              p.price::numeric::float8 AS price,
-              p.stock,
-              p.created_at,
-              c.id AS category_id,
-              c.name AS category_name
-         FROM products p
-         LEFT JOIN categories c ON c.id = p.category_id
-        WHERE p.id = $1`,
-      [id]
-    );
-    if (!result.rows.length) {
-      return res.status(404).json({ error: "Producto no encontrado" });
-    }
-    res.json(result.rows[0]);
+    const { rows } = await pool.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.description,
+        p.price::numeric::float8 AS price,
+        p.stock,
+        p.category_id,
+        p.image_url
+      FROM products p
+      WHERE p.id=$1
+    `, [id]);
+    if (!rows.length) return res.status(404).json({ error: "Producto no encontrado" });
+    res.json(rows[0]);
   } catch (err) {
-    console.error("❌ GET /products/:id:", err);
+    console.error("GET /products/:id", err);
     res.status(500).json({ error: "Error al obtener producto" });
   }
 });
+
 // Recomendaciones basadas en el producto actual
 router.get("/recommendations/:id", async (req, res) => {
   try {
@@ -219,81 +228,85 @@ router.get("/recommendations/:id", async (req, res) => {
 /* ============================================
    POST /products  (protegido: token + admin)
    ============================================ */
-router.post("/", verifyToken, verifyAdmin, validate(createProductSchema), async (req, res) => {
-  try {
-    let { name, description, price, stock, category_id, image_url } = req.body;
+router.post(
+  "/",
+  verifyToken, verifyAdmin,
+  validate(createProductSchema),
+  async (req, res) => {
+    try {
+      let { name, description, price, stock, category_id, image_url } = req.body;
 
-    if (!name || price === undefined || stock === undefined) {
-      return res.status(400).json({
-        error: "Faltan datos: name, price, stock (category_id es opcional)",
-      });
-    }
+      price = Number(price);
+      stock = parseInt(stock, 10);
+      category_id = category_id ? parseInt(category_id, 10) : null;
 
-    price = Number(price);
-    stock = parseInt(stock, 10);
-    // category_id opcional
-    if (category_id === "" || category_id === undefined || category_id === null) {
-      category_id = null;
-    } else {
-      category_id = parseInt(category_id, 10);
-    }
-
-    if (Number.isNaN(price) || Number.isNaN(stock)) {
-      return res.status(400).json({ error: "Tipos inválidos: price y stock deben ser numéricos" });
-    }
-    if (price <= 0)   return res.status(400).json({ error: "price debe ser > 0" });
-    if (stock < 0)    return res.status(400).json({ error: "stock no puede ser negativo" });
-
-    // Si trae category_id, verifica que exista
-    if (category_id !== null) {
-      const cat = await pool.query("SELECT id FROM categories WHERE id=$1", [category_id]);
-      if (!cat.rows.length) {
-        return res.status(400).json({ error: `La categoría ${category_id} no existe` });
+      if (category_id) {
+        const cat = await pool.query("SELECT id FROM categories WHERE id=$1", [category_id]);
+        if (!cat.rows.length) {
+          return res.status(400).json({ error: `La categoría ${category_id} no existe` });
+        }
       }
+
+      // normaliza image_url
+      image_url = image_url === undefined ? null : (String(image_url).trim() || null);
+
+      const result = await pool.query(
+        `INSERT INTO products (name, description, price, stock, category_id, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, name, description, price::numeric::float8 AS price, stock, category_id, image_url, created_at`,
+        [name, description || null, price, stock, category_id, image_url]
+      );
+
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      console.error("❌ POST /products:", err);
+      res.status(500).json({ error: "Error al crear producto" });
     }
-
-    const result = await pool.query(
-      `INSERT INTO products (name, description, price, stock, category_id, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, description, price::numeric::float8 AS price, stock, category_id, image_url, created_at`,
-      [name.trim(), (description || null), price, stock, category_id, (image_url?.trim() || null)]
-    );
-
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error("❌ POST /products:", err);
-    res.status(500).json({ error: "Error al crear producto" });
   }
-});
+);
 
 
-
+// (1) UPDATE /products/:id  (protegido: token + admin)
 router.put("/:id", verifyToken, verifyAdmin, validate(updateProductSchema), async (req, res) => {
   const { id } = req.params;
-  let { name, description, price, stock, category_id } = req.body;
+  let { name, description, price, stock, category_id, image_url } = req.body;
 
   try {
+    // Normalizaciones/validaciones suaves
     if (price !== undefined) {
       price = Number(price);
-      if (Number.isNaN(price) || price <= 0) {
+      if (!Number.isFinite(price) || price <= 0) {
         return res.status(400).json({ error: "price inválido (debe ser > 0)" });
       }
     }
+
     if (stock !== undefined) {
       stock = parseInt(stock, 10);
-      if (Number.isNaN(stock) || stock < 0) {
+      if (!Number.isInteger(stock) || stock < 0) {
         return res.status(400).json({ error: "stock inválido (no puede ser negativo)" });
       }
     }
+
+    // Permite limpiar la categoría: "", null -> null
     if (category_id !== undefined) {
-      category_id = parseInt(category_id, 10);
-      if (Number.isNaN(category_id)) {
-        return res.status(400).json({ error: "category_id inválido" });
+      if (category_id === "" || category_id === null) {
+        category_id = null;
+      } else {
+        category_id = parseInt(category_id, 10);
+        if (!Number.isInteger(category_id) || category_id <= 0) {
+          return res.status(400).json({ error: "category_id inválido" });
+        }
+        // Verifica existencia
+        const cat = await pool.query("SELECT id FROM categories WHERE id=$1", [category_id]);
+        if (!cat.rows.length) {
+          return res.status(400).json({ error: `La categoría ${category_id} no existe` });
+        }
       }
-      const cat = await pool.query("SELECT id FROM categories WHERE id=$1", [category_id]);
-      if (!cat.rows.length) {
-        return res.status(400).json({ error: `La categoría ${category_id} no existe` });
-      }
+    }
+
+    // image_url opcional (puede limpiarse)
+    if (image_url !== undefined) {
+      image_url = image_url === null ? null : String(image_url).trim() || null;
     }
 
     const result = await pool.query(
@@ -302,10 +315,27 @@ router.put("/:id", verifyToken, verifyAdmin, validate(updateProductSchema), asyn
               description = COALESCE($2, description),
               price       = COALESCE($3, price),
               stock       = COALESCE($4, stock),
-              category_id = COALESCE($5, category_id)
-        WHERE id = $6
-      RETURNING id, name, description, price::numeric::float8 AS price, stock, created_at, category_id`,
-      [name ?? null, description ?? null, price ?? null, stock ?? null, category_id ?? null, id]
+              category_id = COALESCE($5, category_id),
+              image_url   = COALESCE($6, image_url)
+        WHERE id = $7
+      RETURNING
+        id,
+        name,
+        description,
+        price::numeric::float8 AS price,
+        stock,
+        category_id,
+        image_url,
+        created_at`,
+      [
+        name ?? null,
+        description ?? null,
+        price ?? null,
+        stock ?? null,
+        category_id ?? null,
+        image_url ?? null,
+        id,
+      ]
     );
 
     if (!result.rows.length) {

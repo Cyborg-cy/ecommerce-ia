@@ -11,10 +11,12 @@ export default function AdminNewCategoryPage() {
   const [err, setErr] = useState<string | null>(null);
   const [f, setF] = useState({ name: "", description: "" });
 
-  const base =
+    const DEFAULT_API = "http://localhost:3000";
+  const RAW_BASE =
     process.env.NEXT_PUBLIC_API_BASE ||
     process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:3000";
+    DEFAULT_API;
+  const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +28,7 @@ export default function AdminNewCategoryPage() {
     try {
       setSaving(true);
       const token = localStorage.getItem("token") || "";
-      const res = await fetch(`${base}/categories`, {
+      const res = await fetch(`${base}/admin/categories`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

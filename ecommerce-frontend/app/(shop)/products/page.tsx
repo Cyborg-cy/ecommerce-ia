@@ -10,6 +10,7 @@ type Product = {
   stock?: number | null;
   category_id?: number | null;
   category_name?: string | null;
+  image_url?: string | null;
 };
 
 type Meta = {
