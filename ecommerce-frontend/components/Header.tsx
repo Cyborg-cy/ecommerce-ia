@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { api } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 
 export default function Header() {

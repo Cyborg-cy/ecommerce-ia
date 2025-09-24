@@ -1,7 +1,7 @@
 // components/AddToCartControls.tsx
 "use client";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 
