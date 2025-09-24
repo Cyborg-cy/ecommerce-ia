@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { loginUser } from "@/lib/api";
+import { loginUser } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth";
 import toast from "react-hot-toast";
 

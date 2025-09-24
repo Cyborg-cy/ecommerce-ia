@@ -1,11 +1,17 @@
+// lib/api-client.ts
+"use client";
+
 import axios, { InternalAxiosRequestConfig } from "axios";
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || "";
+if (!BASE) {
+  // No pongas localhost por defecto: evita romper el build
+  console.warn("NEXT_PUBLIC_API_BASE no está definida (cliente).");
+}
+
 export const api = axios.create({
-  baseURL:
-    process.env.NEXT_PUBLIC_API_BASE ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:3000",
-  withCredentials: false, // usamos header Authorization, no cookies
+  baseURL: BASE,           // sin "localhost" por defecto
+  withCredentials: false,  // usamos Authorization, no cookies
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -19,7 +25,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-// Helpers mínimos
+// Helpers mínimos (cliente)
 export async function registerUser(payload: {
   name: string;
   email: string;

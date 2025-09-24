@@ -1,6 +1,9 @@
 // app/page.tsx
 import Link from "next/link";
 
+// Evita prerender estático que tronaba con fetch dinámico
+export const dynamic = "force-dynamic";
+
 type Product = {
   id: number;
   name: string;
@@ -9,31 +12,31 @@ type Product = {
   category_name?: string | null;
 };
 
+// ⚠️ Lee la base de la API desde env (NO uses localhost en producción)
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:3000";
+
 async function getProducts(): Promise<Product[]> {
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:3000";
   try {
-    const res = await fetch(`${base}/products`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE}/products`, { cache: "no-store" });
     if (!res.ok) throw new Error(`API /products respondió ${res.status}`);
     const data = await res.json();
-    // 🔑 Ajusta según el formato real
-    if (Array.isArray(data)) {
-      return data;              // Caso 1: backend devuelve array directo
-    } else if (Array.isArray(data.items)) {
-      return data.items;        // Caso 2: backend devuelve {items, meta}
-    } else {
-      console.error("Formato inesperado de /products:", data);
-      return [];
-    }
+
+    // Ajusta según tu backend
+    if (Array.isArray(data)) return data;            // caso: array directo
+    if (Array.isArray(data.items)) return data.items; // caso: { items, meta }
+    console.error("Formato inesperado de /products:", data);
+    return [];
   } catch (e) {
     console.error("Home getProducts error:", e);
     return [];
   }
 }
 
-export default async function Home() {
+export default async function HomePage() {
+  // ⬇️ AHORA SÍ: define 'products' y úsalo abajo
   const products = await getProducts();
 
   return (
@@ -59,7 +62,7 @@ export default async function Home() {
           <p className="text-gray-500">No hay productos para mostrar.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {products.slice(0, 6).map((p) => (
+            {products.slice(0, 6).map((p: Product) => (
               <Link
                 key={p.id}
                 href={`/products/${p.id}`}
@@ -70,7 +73,10 @@ export default async function Home() {
                   {p.category_name || "General"}
                 </div>
                 <div className="mt-2 font-semibold">
-                  ${typeof p.price === "string" ? p.price : p.price.toFixed(2)}
+                  $
+                  {typeof p.price === "number"
+                    ? p.price.toFixed(2)
+                    : p.price}
                 </div>
               </Link>
             ))}
