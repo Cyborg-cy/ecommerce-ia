@@ -432,11 +432,15 @@ router.get("/:id", async (req, res) => {
 
     const { rows } = await pool.query(
       `SELECT
-         id, name, description,
-         price::numeric::float8 AS price,
-         stock, category_id
-       FROM products
-       WHERE id = $1`,
+         p.id,
+         p.name,
+         p.description,
+         p.price::numeric::float8 AS price,
+         p.stock,
+         p.category_id,
+         p.image_url              
+       FROM products p
+       WHERE p.id = $1`,
       [id]
     );
 

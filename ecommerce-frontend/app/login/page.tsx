@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation"; // 👈 faltaba esto
 import { loginUser } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import toast from "react-hot-toast";
 
 export default function LoginPage() {
   const { setToken, setUser } = useAuth();
@@ -35,6 +36,8 @@ export default function LoginPage() {
 
       setToken(token);         // tu AuthProvider guardará en localStorage y/o levantará perfil
       if (res.user) setUser?.(res.user); // opcional: si tu API devuelve user
+
+      toast.success(`Bienvenido${res.user?.name ? `, ${res.user.name}` : ""}!`);
 
       const next = sp.get("next") || "/admin"; // 👈 vuelve a admin si venías de allí
       r.replace(next);

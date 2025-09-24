@@ -11,6 +11,8 @@ export default function Filters() {
   const [min, setMin] = useState<string>("");
   const [max, setMax] = useState<string>("");
   const [category, setCategory] = useState<string>(""); // opcional
+  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCats, setLoadingCats] = useState(false);
 
   // Mantener el estado sincronizado con la URL (incluye sp en deps)
   useEffect(() => {
@@ -19,6 +21,29 @@ export default function Filters() {
     setMax(sp.get("max") ?? "");
     setCategory(sp.get("category") ?? "");
   }, [sp]);
+
+  // Cargar categorías desde API pública
+  useEffect(() => {
+    const base =
+      process.env.NEXT_PUBLIC_API_BASE ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      "http://localhost:3000";
+    (async () => {
+      try {
+        setLoadingCats(true);
+        const res = await fetch(`${base}/categories`, { cache: "no-store" });
+        if (!res.ok) throw new Error("No se pudieron cargar categorías");
+        const data = await res.json();
+        if (Array.isArray(data)) setCategories(data);
+        else if (Array.isArray(data?.items)) setCategories(data.items);
+        else setCategories([]);
+      } catch {
+        setCategories([]);
+      } finally {
+        setLoadingCats(false);
+      }
+    })();
+  }, []);
 
   // Construir params nuevos
   const buildParams = useCallback(() => {
@@ -111,10 +136,13 @@ export default function Filters() {
           onChange={(e) => setCategory(e.target.value)}
         >
           <option value="">Todas</option>
-          <option value="1">Electrónica</option>
-          <option value="2">Hogar</option>
-          <option value="3">Ropa</option>
-          {/* TODO: si tienes endpoint /categories, puedes mapearlas dinámicamente */}
+          {loadingCats ? (
+            <option disabled>Cargando...</option>
+          ) : (
+            categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>{c.name}</option>
+            ))
+          )}
         </select>
       </div>
 
