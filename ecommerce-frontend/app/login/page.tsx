@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation"; // 👈 faltaba esto
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { loginUser } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import toast from "react-hot-toast";
 
-export default function LoginPage() {
+/** 
+ * Extrae toda tu lógica actual a un componente interno.
+ * Este componente SÍ usa useSearchParams y lo montamos dentro de <Suspense>.
+ */
+function LoginInner() {
   const { setToken, setUser } = useAuth();
   const sp = useSearchParams();
   const r = useRouter();
@@ -20,7 +24,7 @@ export default function LoginPage() {
   useEffect(() => {
     const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (t) {
-      const next = sp.get("next") || "/admin"; // 👈 vuelve a donde ibas (por defecto /admin)
+      const next = sp.get("next") || "/admin"; // vuelve a donde ibas (por defecto /admin)
       r.replace(next);
     }
   }, [sp, r]);
@@ -34,12 +38,12 @@ export default function LoginPage() {
       const token = res?.token;
       if (!token) throw new Error("Respuesta inválida del servidor (sin token).");
 
-      setToken(token);         // tu AuthProvider guardará en localStorage y/o levantará perfil
-      if (res.user) setUser?.(res.user); // opcional: si tu API devuelve user
+      setToken(token);
+      if (res.user) setUser?.(res.user);
 
       toast.success(`Bienvenido${res.user?.name ? `, ${res.user.name}` : ""}!`);
 
-      const next = sp.get("next") || "/admin"; // 👈 vuelve a admin si venías de allí
+      const next = sp.get("next") || "/admin";
       r.replace(next);
     } catch (err: any) {
       setMsg(err?.response?.data?.error || err?.message || "Error al iniciar sesión");
@@ -86,5 +90,17 @@ export default function LoginPage() {
         </button>
       </form>
     </div>
+  );
+}
+
+/**
+ * Página exportada: envuelve LoginInner con <Suspense>.
+ * Esto satisface el requisito de Next para useSearchParams en App Router.
+ */
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Cargando…</div>}>
+      <LoginInner />
+    </Suspense>
   );
 }
