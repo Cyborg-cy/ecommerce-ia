@@ -1,5 +1,5 @@
 // app/(shop)/products/[id]/page.tsx
-import { api } from "@/lib/api";
+import { api } from "@/lib/api-client";
 import BuyBox from "@/components/BuyBox";
 import Recommendations from "@/components/Recommendations";
 import SafeImage from "@/components/SafeImage";
