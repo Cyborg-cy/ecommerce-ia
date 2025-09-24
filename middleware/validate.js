@@ -1,39 +1,70 @@
-// middleware/validate.js (corregido, compatible con Joi/Zod/Yup)
+// middleware/validate.js  (body-only, soporta Joi/Zod)
 export const validate = (schema) => async (req, res, next) => {
   try {
-    // Estructura común que muchos esquemas aceptan
-    const candidate = {
-      body: req.body,
-      params: req.params,
-      query: req.query, // la lees, NO la reasignas
-    };
+    // Log mínimo para diagnosticar body vacío en validaciones (se puede quitar luego)
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        // Evita loguear payloads enormes
+        const preview = typeof req.body === "object" ? JSON.stringify(req.body).slice(0, 500) : String(req.body);
+        // eslint-disable-next-line no-console
+        console.log(
+          "[validate]",
+          req.method,
+          req.originalUrl,
+          "ct=",
+          req.headers["content-type"],
+          "len=",
+          req.headers["content-length"],
+          "keys=",
+          typeof req.body === "object" && req.body ? Object.keys(req.body).length : 0
+        );
+        // eslint-disable-next-line no-console
+        console.log("[validate] Incoming body preview:", preview || "<empty>");
+      } catch {}
+    }
+    // Normaliza: si body viene como string JSON, parsearlo primero
+    if (typeof req.body === "string" && req.body.trim().startsWith("{")) {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {}
+    }
 
-    // Soporta tanto .parse (Zod) como .validateAsync (Joi)
-    const parsed =
-      typeof schema.parse === "function"
-        ? schema.parse(candidate)
-        : typeof schema.validateAsync === "function"
-        ? await schema.validateAsync(candidate, { abortEarly: false, stripUnknown: true })
-        : candidate;
+    // detecta tipo de esquema y valida SOLO req.body
+    if (schema?.parseAsync) {
+      // Zod
+      req.body = await schema.parseAsync(req.body);
+    } else if (schema?.safeParse) {
+      // Zod (sync)
+      const r = schema.safeParse(req.body);
+      if (!r.success) throw r.error;
+      req.body = r.data;
+    } else if (schema?.validateAsync) {
+      // Joi
+      req.body = await schema.validateAsync(req.body, {
+        abortEarly: false,
+        stripUnknown: true,
+        convert: true, // "123" -> 123
+      });
+    } else if (schema?.validate) {
+      // Joi (sync)
+      const { error, value } = schema.validate(req.body, {
+        abortEarly: false,
+        stripUnknown: true,
+        convert: true,
+      });
+      if (error) throw error;
+      req.body = value;
+    } else {
+      // esquema desconocido: no validar
+    }
 
-    // Actualiza solo body/params (opcionales) y guarda lo demás en res.locals
-    if (parsed.body) req.body = parsed.body;
-    if (parsed.params) req.params = parsed.params;
-
-    // Guarda la query saneada sin mutar req.query
-    res.locals.validated = {
-      ...(res.locals.validated || {}),
-      query: parsed.query ?? req.query,
-    };
-
-    return next();
+    next();
   } catch (err) {
-    // Normaliza errores de validación
     const details =
       err?.details?.map?.((d) => d.message) ||
-      err?.errors ||
+      err?.issues?.map?.((i) => i.message) ||
       err?.message ||
       "Validación inválida";
-    return res.status(400).json({ error: "Validación falló", details });
+    res.status(400).json({ error: "Validación falló", details });
   }
 };

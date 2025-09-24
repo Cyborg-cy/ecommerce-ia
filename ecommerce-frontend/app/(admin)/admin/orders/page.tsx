@@ -3,7 +3,7 @@
 import AdminGate from "@/components/AdminGate";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-
+import Link from "next/link";
 
 type Order = {
   id: number;
@@ -11,17 +11,16 @@ type Order = {
   status: string;
   total?: number | string | null;
   created_at?: string;
-  email?: string; // viene del join en tu endpoint
+  email?: string;
 };
 
 const STATUSES = ["pending", "paid", "shipped", "cancelled"] as const;
 
-function formatDateInput(d?: Date | null) {
-  if (!d) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+function fmtMoney(v?: number | string | null) {
+  if (v == null) return "—";
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return `$${n.toFixed(2)}`;
 }
 
 export default function AdminOrdersPage() {
@@ -34,13 +33,23 @@ export default function AdminOrdersPage() {
   const [from, setFrom] = useState<string>(""); // YYYY-MM-DD
   const [to, setTo] = useState<string>("");
 
+  // 👇 nuevo: para deshabilitar selector mientras actualiza un pedido concreto
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
+
+  // 👇 base URL robusta (corrige si por error llega 3001)
+  const DEFAULT_API = "http://localhost:3000";
+  const RAW_BASE =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    DEFAULT_API;
+  const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
+
   const hasFilters = useMemo(() => !!(status || from || to), [status, from, to]);
 
   async function load() {
     setLoading(true);
     setErr(null);
     try {
-      const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
@@ -64,7 +73,9 @@ export default function AdminOrdersPage() {
       const arr: Order[] = await res.json();
       setItems(Array.isArray(arr) ? arr : []);
     } catch (e: any) {
-      toast.error(e?.message || "No se pudieron cargar los pedidos");
+      const msg = e?.message || "No se pudieron cargar los pedidos";
+      toast.error(msg);
+      setErr(msg);
       setItems([]);
     } finally {
       setLoading(false);
@@ -74,11 +85,17 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // carga inicial
+
+  // 👇 nuevo: recargar cuando cambien filtros (si prefieres botón, elimina este effect)
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, from, to]);
 
   async function updateStatus(id: number, newStatus: string) {
     try {
-      const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
+      setUpdatingId(id); // 👈 deshabilita el selector solo para ese pedido
       const token = localStorage.getItem("token") || "";
       const res = await fetch(`${base}/admin/orders/${id}/status`, {
         method: "PUT",
@@ -88,17 +105,21 @@ export default function AdminOrdersPage() {
         },
         body: JSON.stringify({ status: newStatus }),
       });
-      toast.success(`Pedido #${id} → ${newStatus}`);
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || "No se pudo actualizar el estado");
       }
-      // refresca solo ese pedido en memoria
+
+      // refresh parcial
       setItems((prev) =>
         prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o))
       );
+      toast.success(`Pedido #${id} → ${newStatus}`);
     } catch (e: any) {
       toast.error(e?.message || "Error al actualizar estado");
+    } finally {
+      setUpdatingId(null);
     }
   }
 
@@ -149,6 +170,7 @@ export default function AdminOrdersPage() {
                 min={from || undefined}
               />
             </div>
+            {/* Si prefieres filtrar solo al click, deja este botón y elimina el effect de arriba */}
             <button
               className="px-3 py-1 rounded border"
               onClick={load}
@@ -191,11 +213,7 @@ export default function AdminOrdersPage() {
                         {o.status}
                       </span>
                     </td>
-                    <td className="p-2 border">
-                      {typeof o.total === "number"
-                        ? o.total.toFixed(2)
-                        : o.total ?? "—"}
-                    </td>
+                    <td className="p-2 border">{fmtMoney(o.total)}</td>
                     <td className="p-2 border">
                       {o.created_at
                         ? new Date(o.created_at).toLocaleString()
@@ -207,9 +225,11 @@ export default function AdminOrdersPage() {
                         <select
                           className="border rounded px-2 py-1"
                           value=""
+                          disabled={updatingId === o.id}
                           onChange={(e) => {
                             const v = e.target.value;
                             if (v) updateStatus(o.id, v);
+                            e.currentTarget.value = ""; // resetea
                           }}
                         >
                           <option value="">—</option>
@@ -219,6 +239,9 @@ export default function AdminOrdersPage() {
                             </option>
                           ))}
                         </select>
+                        <Link href={`/admin/orders/${o.id}`} className="text-sm underline">
+                        Ver
+                        </Link>
                       </div>
                     </td>
                   </tr>

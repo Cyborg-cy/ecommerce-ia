@@ -32,8 +32,11 @@ services:
       DB_NAME: ecommerce
       DB_PORT: 5432
       PORT: 3000
+      UPLOADS_DIR: /app/uploads         
     ports:
       - "3000:3000"
+    volumes:
+      - ./uploads:/app/uploads        
     depends_on:
       - db
 

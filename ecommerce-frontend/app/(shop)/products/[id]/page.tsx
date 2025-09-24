@@ -2,6 +2,7 @@
 import { api } from "@/lib/api";
 import BuyBox from "@/components/BuyBox";
 import Recommendations from "@/components/Recommendations";
+import SafeImage from "@/components/SafeImage";
 
 type Product = {
   id: number;
@@ -46,13 +47,10 @@ export default async function ProductDetail({
       {/* Imagen */}
       <div className="bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden min-h-[260px]">
         {p.image_url ? (
-          <img
+          <SafeImage
             src={p.image_url}
             alt={p.name}
             className="max-h-[460px] w-auto object-contain"
-            onError={(ev) => {
-              (ev.currentTarget as HTMLImageElement).style.display = "none";
-            }}
           />
         ) : (
           <span className="text-gray-400 text-sm">Sin imagen</span>

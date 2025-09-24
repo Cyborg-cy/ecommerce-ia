@@ -123,6 +123,7 @@ router.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
 
 
 /* ---------- ORDERS (ejemplo que ya tienes) ---------- */
+// GET /admin/orders?status=paid&from=2025-09-01&to=2025-09-30
 router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
   const { status, from, to } = req.query;
   const params = [];
@@ -132,27 +133,108 @@ router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
   if (from)   { params.push(from);   where.push(`o.created_at >= $${params.length}`); }
   if (to)     { params.push(to);     where.push(`o.created_at <= $${params.length}`); }
 
-  const sql =
-  `SELECT o.*, u.email
-     FROM orders o
-     JOIN users u ON u.id = o.user_id
-     ${where.length ? "WHERE " + where.join(" AND ") : ""}
-     ORDER BY o.created_at DESC`;
-
+  const sql = `
+    SELECT
+      o.id,
+      o.user_id,
+      o.status,
+      o.total::numeric::float8 AS total,
+      o.created_at,
+      u.email
+    FROM orders o
+    JOIN users u ON u.id = o.user_id
+    ${where.length ? "WHERE " + where.join(" AND ") : ""}
+    ORDER BY o.created_at DESC
+  `;
   const { rows } = await pool.query(sql, params);
   res.json(rows);
 });
 
+// GET /admin/orders/:id -> detalle + items
+router.get("/orders/:id", verifyToken, verifyAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "ID inválido" });
+  }
+
+  try {
+    const { rows: oh } = await pool.query(
+      `SELECT
+         o.id, o.user_id, o.status,
+         o.total::numeric::float8 AS total,
+         o.created_at, o.updated_at,
+         u.email,
+         o.shipping_name, o.shipping_phone, o.shipping_address, o.shipping_city, o.shipping_zip
+       FROM orders o
+       JOIN users u ON u.id = o.user_id
+       WHERE o.id=$1`,
+      [id]
+    );
+    if (!oh.length) return res.status(404).json({ error: "Pedido no encontrado" });
+
+    const { rows: items } = await pool.query(
+      `SELECT
+         oi.id,
+         oi.product_id,
+         p.name,
+         p.image_url,
+         oi.quantity,
+         oi.unit_price::numeric::float8 AS unit_price,
+         (oi.quantity * oi.unit_price)::numeric::float8 AS line_total
+       FROM order_items oi
+       JOIN products p ON p.id = oi.product_id
+       WHERE oi.order_id=$1
+       ORDER BY oi.id ASC`,
+      [id]
+    );
+
+    res.json({ order: oh[0], items });
+  } catch (err) {
+    console.error("GET /admin/orders/:id", err);
+    res.status(500).json({ error: "No se pudo cargar el pedido" });
+  }
+});
+
+// PUT /admin/orders/:id/status  { status }
+router.put("/orders/:id/status", verifyToken, verifyAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const { status } = req.body || {};
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID inválido" });
+  if (!["pending", "paid", "shipped", "cancelled"].includes(status)) {
+    return res.status(400).json({ error: "Estado inválido" });
+  }
+  const { rows } = await pool.query(
+    "UPDATE orders SET status=$1 WHERE id=$2 RETURNING id, user_id, status, total::numeric::float8 AS total, created_at",
+    [status, id]
+  );
+  if (!rows.length) return res.status(404).json({ error: "Pedido no encontrado" });
+  res.json(rows[0]);
+});
+
 /* ---------- STATS (ejemplo que ya tienes) ---------- */
+// GET /admin/stats
 router.get("/stats", verifyToken, verifyAdmin, async (_req, res) => {
   try {
-    const [{ rows: u }, { rows: p }, { rows: o }, { rows: r }] = await Promise.all([
-      pool.query("SELECT COUNT(*)::int AS total_users FROM users"),
-      pool.query("SELECT COUNT(*)::int AS total_products FROM products"),
-      pool.query("SELECT COUNT(*)::int AS total_orders FROM orders"),
-      pool.query("SELECT COALESCE(SUM(total)::numeric::float8, 0) AS revenue_paid FROM orders WHERE status = 'paid'"),
-    ]);
-    res.json({ ...u[0], ...p[0], ...o[0], ...r[0] });
+    const [{ rows: u }, { rows: p }, { rows: o }, { rows: r }, { rows: obyst }] =
+      await Promise.all([
+        pool.query("SELECT COUNT(*)::int AS total_users FROM users"),
+        pool.query("SELECT COUNT(*)::int AS total_products FROM products"),
+        pool.query("SELECT COUNT(*)::int AS total_orders FROM orders"),
+        pool.query("SELECT COALESCE(SUM(total)::numeric::float8, 0) AS revenue_paid FROM orders WHERE status='paid'"),
+        pool.query(`
+          SELECT status, COUNT(*)::int AS count
+          FROM orders
+          GROUP BY status
+        `),
+      ]);
+
+    res.json({
+      total_users: u[0]?.total_users ?? 0,
+      total_products: p[0]?.total_products ?? 0,
+      total_orders: o[0]?.total_orders ?? 0,
+      revenue_paid: r[0]?.revenue_paid ?? 0,
+      orders_by_status: obyst ?? [],
+    });
   } catch (err) {
     console.error("GET /admin/stats", err);
     res.status(500).json({ error: "No se pudieron obtener estadísticas" });

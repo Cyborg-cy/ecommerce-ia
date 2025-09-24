@@ -1,41 +1,26 @@
 "use client";
 
 import AdminGate from "@/components/AdminGate";
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
-import toast from "react-hot-toast";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 
+type Category = { id: number; name: string };
 type Product = {
   id: number;
   name: string;
   description?: string | null;
-  price: number;
-  stock: number;
+  price: number | string;
+  stock: number | string;
   category_id?: number | null;
   image_url?: string | null;
 };
 
-type Category = { id: number; name: string };
-
 export default function AdminEditProductPage() {
-  const { id } = useParams<{ id: string }>();
   const r = useRouter();
+  const { id } = useParams<{ id: string }>();
   const pid = Number.parseInt(String(id ?? ""), 10);
-
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [cats, setCats] = useState<Category[]>([]);
-  const [saving, setSaving] = useState(false);
-
-  const [f, setF] = useState({
-    name: "",
-    description: "",
-    price: "", // usar string para controlar input
-    stock: "",
-    category_id: "", // "" = sin categoría
-    image_url: "",
-  });
 
   const DEFAULT_API = "http://localhost:3000";
   const RAW_BASE =
@@ -44,13 +29,56 @@ export default function AdminEditProductPage() {
     DEFAULT_API;
   const base = RAW_BASE.includes("localhost:3001") ? DEFAULT_API : RAW_BASE;
 
-  function onChange<K extends keyof typeof f>(k: K, v: string) {
-    setF((prev) => ({ ...prev, [k]: v }));
-  }
+  const [cats, setCats] = useState<Category[]>([]);
+  const [loadingCats, setLoadingCats] = useState(true);
+
+  // Modo imagen
+  const [mode, setMode] = useState<"url" | "file">("url");
+
+  // Form controlado
+  const [f, setF] = useState({
+    name: "",
+    description: "",
+    price: "",
+    stock: "",
+    category_id: "",
+    image_url: "",
+  });
+
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
+    if (mode === "url") setFile(null);
+  }, [mode]);
+
+  function onChange<K extends keyof typeof f>(key: K, val: string) {
+    setF((prev) => ({ ...prev, [key]: val }));
+  }
+
+  async function uploadImage(file: File): Promise<string> {
+    const token = localStorage.getItem("token") || "";
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${base}/uploads/image`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`POST /uploads/image → ${res.status} ${t || ""}`.trim());
+    }
+    const data = await res.json();
+    return data.url as string;
+  }
+
+  // Cargar categorías y producto
+  useEffect(() => {
     if (!Number.isInteger(pid) || pid <= 0) {
-      setErr("ID inválido");
+      toast.error("ID inválido");
       setLoading(false);
       return;
     }
@@ -59,44 +87,49 @@ export default function AdminEditProductPage() {
     (async () => {
       try {
         setLoading(true);
-        setErr(null);
 
-        // Cargar producto
-        const prodRes = await fetch(`${base}/products/${pid}`, { cache: "no-store" });
-        if (prodRes.status === 404) throw new Error("Producto no encontrado");
-        if (!prodRes.ok) {
-          const txt = await prodRes.text();
-          throw new Error(`GET /products/${pid} → ${prodRes.status} ${txt || ""}`);
-        }
-        const p: Product = await prodRes.json();
-
-        // Cargar categorías para el select (admin)
-        const token = localStorage.getItem("token") || "";
-        const catRes = await fetch(`${base}/admin/categories`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          cache: "no-store",
-        });
-        if (catRes.ok) {
-          const list: Category[] = await catRes.json();
-          if (alive) setCats(list ?? []);
-        } else {
-          // si falla, dejamos el select solo con "Sin categoría"
-          if (alive) setCats([]);
-        }
-
-        if (alive) {
-          setF({
-            name: p.name || "",
-            description: (p.description ?? "") || "",
-            price: String(typeof p.price === "number" ? p.price : Number(p.price ?? 0)),
-            stock: String(typeof p.stock === "number" ? p.stock : Number(p.stock ?? 0)),
-            category_id: p.category_id ? String(p.category_id) : "",
-            image_url: (p.image_url ?? "") || "",
+        // categorías
+        try {
+          setLoadingCats(true);
+          const token = localStorage.getItem("token") || "";
+          let res = await fetch(`${base}/admin/categories`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            cache: "no-store",
           });
+          if (res.status === 404 || res.status === 403) {
+            res = await fetch(`${base}/categories`, { cache: "no-store" });
+          }
+          if (res.ok) {
+            const data: Category[] = await res.json();
+            if (!alive) return;
+            setCats(data || []);
+          }
+        } finally {
+          setLoadingCats(false);
         }
-      } catch (e: any) {
+
+        // producto
+        const pr = await fetch(`${base}/products/${pid}`, { cache: "no-store" });
+        if (!pr.ok) {
+          const txt = await pr.text();
+          throw new Error(`No se pudo cargar el producto (${pr.status}) ${txt || ""}`.trim());
+        }
+        const p: Product = await pr.json();
         if (!alive) return;
-        setErr(e?.message || "No se pudo cargar el producto");
+
+        setF({
+          name: p.name ?? "",
+          description: (p.description as string) ?? "",
+          price: String(p.price ?? ""),
+          stock: String(p.stock ?? ""),
+          category_id: p.category_id ? String(p.category_id) : "",
+          image_url: p.image_url ?? "",
+        });
+
+        // si ya hay image_url, default a URL; si no, deja URL igual
+        setMode("url");
+      } catch (e: any) {
+        toast.error(e?.message || "Error al cargar");
       } finally {
         if (alive) setLoading(false);
       }
@@ -110,7 +143,6 @@ export default function AdminEditProductPage() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
 
-    // Validación básica cliente
     if (!f.name.trim()) return toast.error("El nombre es obligatorio");
     const priceNum = Number(f.price);
     const stockNum = Number(f.stock);
@@ -119,16 +151,27 @@ export default function AdminEditProductPage() {
 
     try {
       setSaving(true);
-      const token = localStorage.getItem("token") || "";
 
-      const body: any = {
+      // resolver image_url final
+      let finalImageUrl = (f.image_url || "").trim();
+      if (mode === "file" && file) {
+        try {
+          setUploading(true);
+          finalImageUrl = await uploadImage(file);
+        } finally {
+          setUploading(false);
+        }
+      }
+
+      const token = localStorage.getItem("token") || "";
+      const body = {
         name: f.name.trim(),
         description: f.description.trim() || null,
-        price: priceNum,
-        stock: stockNum,
-        image_url: f.image_url.trim() || null,
+        price: Number(f.price),
+        stock: parseInt(f.stock, 10),
+        category_id: f.category_id ? Number(f.category_id) : null,
+        image_url: finalImageUrl || null,
       };
-      if (f.category_id) body.category_id = Number(f.category_id); // si está vacío, no lo envíes
 
       const res = await fetch(`${base}/products/${pid}`, {
         method: "PUT",
@@ -138,18 +181,17 @@ export default function AdminEditProductPage() {
         },
         body: JSON.stringify(body),
       });
-
       if (!res.ok) {
         const txt = await res.text();
-        throw new Error(`PUT /products/${pid} → ${res.status} ${txt || ""}`);
+        throw new Error(`Error al guardar (${res.status}) ${txt || ""}`.trim());
       }
 
-      toast.success("Producto guardado");
+      toast.success("Producto actualizado");
       r.push("/admin/products");
     } catch (e: any) {
       toast.error(e?.message || "No se pudo guardar");
     } finally {
-      setSaving(false); // sin texto "Guardando…", solo deshabilitar
+      setSaving(false);
     }
   }
 
@@ -166,117 +208,155 @@ export default function AdminEditProductPage() {
       <div className="p-6 max-w-2xl">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Editar producto #{pid}</h1>
-          <Link href="/admin/products" className="underline text-sm">← Volver</Link>
+          <Link href="/admin/products" className="underline text-sm">
+            ← Volver
+          </Link>
         </div>
 
-        {err ? (
-          <p className="text-red-600 mt-4">{err}</p>
-        ) : (
-          <form onSubmit={save} className="space-y-4 mt-6">
+        <form onSubmit={save} className="space-y-4 mt-4">
+          <div>
+            <label className="block text-sm">Nombre</label>
+            <input
+              className="border rounded px-3 py-2 w-full"
+              value={f.name ?? ""}
+              onChange={(e) => onChange("name", e.target.value)}
+              required
+              autoComplete="off"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm">Descripción (opcional)</label>
+            <textarea
+              className="border rounded px-3 py-2 w-full"
+              value={f.description ?? ""}
+              onChange={(e) => onChange("description", e.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm">Nombre</label>
+              <label className="block text-sm">Precio</label>
               <input
+                inputMode="decimal"
                 className="border rounded px-3 py-2 w-full"
-                value={f.name}
-                onChange={(e) => onChange("name", e.target.value)}
-                required
-                autoComplete="off"
+                value={f.price ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^\d.]/g, "");
+                  onChange("price", v);
+                }}
+                placeholder="0.00"
               />
             </div>
-
             <div>
-              <label className="block text-sm">Descripción (opcional)</label>
-              <textarea
-                className="border rounded px-3 py-2 w-full"
-                value={f.description}
-                onChange={(e) => onChange("description", e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm">Precio</label>
-                <input
-                  inputMode="decimal"
-                  className="border rounded px-3 py-2 w-full"
-                  value={f.price}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/[^\d.]/g, "");
-                    onChange("price", v);
-                  }}
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label className="block text-sm">Stock</label>
-                <input
-                  inputMode="numeric"
-                  className="border rounded px-3 py-2 w-full"
-                  value={f.stock}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/[^\d]/g, "");
-                    onChange("stock", v);
-                  }}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm">Categoría (opcional)</label>
-              <select
-                className="border rounded px-3 py-2 w-full"
-                value={f.category_id}
-                onChange={(e) => onChange("category_id", e.target.value)}
-              >
-                <option value="">Sin categoría</option>
-                {cats.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} (#{c.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm">Imagen (URL, opcional)</label>
+              <label className="block text-sm">Stock</label>
               <input
+                inputMode="numeric"
                 className="border rounded px-3 py-2 w-full"
-                value={f.image_url}
-                onChange={(e) => onChange("image_url", e.target.value)}
-                placeholder="https://…/imagen.jpg"
-                autoComplete="off"
+                value={f.stock ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^\d]/g, "");
+                  onChange("stock", v);
+                }}
+                placeholder="0"
               />
-              {f.image_url.trim() ? (
-                <div className="mt-2">
-                  <img
-                    src={f.image_url}
-                    alt="preview"
-                    className="max-h-48 rounded border"
-                    onError={(ev) => ((ev.currentTarget.style.display = "none"))}
-                  />
-                </div>
-              ) : null}
-              <div className="mt-2">
-                <button
-                  type="button"
-                  className="text-xs underline"
-                  onClick={() => onChange("image_url", "")}
-                >
-                  Quitar imagen
-                </button>
-              </div>
             </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={saving}
-              className="bg-black text-white rounded px-4 py-2 disabled:opacity-60"
+          <div>
+            <label className="block text-sm">Categoría (opcional)</label>
+            <select
+              className="border rounded px-3 py-2 w-full"
+              value={f.category_id ?? ""}
+              onChange={(e) => onChange("category_id", e.target.value)}
+              disabled={loadingCats}
             >
-              Guardar
-            </button>
-          </form>
-        )}
+              <option value="">Sin categoría</option>
+              {cats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} (#{c.id})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Modo imagen */}
+          <div className="flex gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                checked={mode === "url"}
+                onChange={() => setMode("url")}
+              />
+              Desde URL
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                checked={mode === "file"}
+                onChange={() => setMode("file")}
+              />
+              Subir archivo
+            </label>
+          </div>
+
+          {mode === "url" ? (
+            <div>
+              <label className="block text-sm">URL de imagen (opcional)</label>
+              <input
+                type="url"
+                className="border rounded px-3 py-2 w-full"
+                placeholder="https://…"
+                value={f.image_url ?? ""}
+                onChange={(e) => setF({ ...f, image_url: e.target.value })}
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm">Archivo</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="block"
+              />
+              {file && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {file.name} ({Math.round((file.size / 1024 / 1024) * 100) / 100} MB)
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Preview */}
+          <div className="mt-2 w-28 h-28 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
+            {mode === "file" && file ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={URL.createObjectURL(file)}
+                alt="preview"
+                className="w-full h-full object-cover"
+              />
+            ) : f.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={f.image_url}
+                alt="preview"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-xs text-gray-400">Sin imagen</span>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving || uploading}
+            className="bg-black text-white rounded px-4 py-2 disabled:opacity-60"
+          >
+            {uploading ? "Subiendo…" : saving ? "Guardando…" : "Guardar"}
+          </button>
+        </form>
       </div>
     </AdminGate>
   );

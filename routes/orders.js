@@ -114,18 +114,43 @@ router.post("/", verifyToken, validate(createOrderSchema), async (req, res) => {
  * Historial del usuario autenticado (lista compacta)
  */
 router.get("/", verifyToken, async (req, res) => {
+  const { status, from, to } = req.query;
+  const uid = req.user.id;
+
+  const params = [uid];
+  const where = ["o.user_id = $1"];
+
+  if (status) {
+    params.push(status);
+    where.push(`o.status = $${params.length}`);
+  }
+  if (from) {
+    params.push(from);
+    where.push(`o.created_at >= $${params.length}`);
+  }
+  if (to) {
+    params.push(to);
+    where.push(`o.created_at <= $${params.length}`);
+  }
+
+  const sql = `
+    SELECT
+      o.id,
+      o.user_id,
+      o.status,
+      o.total::numeric::float8 AS total,
+      o.created_at,
+      o.updated_at
+    FROM orders o
+    WHERE ${where.join(" AND ")}
+    ORDER BY o.created_at DESC
+  `;
   try {
-    const { rows } = await pool.query(
-      `SELECT id, total, status, payment_status, stripe_payment_intent_id, created_at
-         FROM orders
-        WHERE user_id = $1
-        ORDER BY created_at DESC`,
-      [req.user.id]
-    );
+    const { rows } = await pool.query(sql, params);
     res.json(rows);
   } catch (err) {
-    console.error("❌ GET /orders:", err);
-    res.status(500).json({ error: "Error al obtener pedidos" });
+    console.error("GET /orders", err);
+    res.status(500).json({ error: "No se pudieron obtener tus pedidos" });
   }
 });
 
@@ -134,43 +159,45 @@ router.get("/", verifyToken, async (req, res) => {
  * Detalle de una orden (dueño o admin)
  */
 router.get("/:id", verifyToken, async (req, res) => {
-  const orderId = Number(req.params.id);
-  if (Number.isNaN(orderId)) {
-    return res.status(400).json({ error: "order id inválido" });
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "ID inválido" });
   }
-
-  const client = await pool.connect();
   try {
-    const { exists, allowed } = await assertOwnerOrAdmin(client, orderId, req.user);
-    if (!exists) return res.status(404).json({ error: "Pedido no encontrado" });
-    if (!allowed) return res.status(403).json({ error: "No tienes permisos para ver este pedido" });
-
-    const { rows: headerRows } = await client.query(
-      `SELECT id, user_id, total, status, payment_status, stripe_payment_intent_id, created_at
-         FROM orders
-        WHERE id = $1`,
-      [orderId]
+    const { rows: oh } = await pool.query(
+      `SELECT id, user_id, status,
+              total::numeric::float8 AS total,
+              created_at, updated_at,
+              shipping_name, shipping_phone, shipping_address, shipping_city, shipping_zip
+       FROM orders
+       WHERE id=$1`,
+      [id]
     );
-    const order = headerRows[0];
+    if (!oh.length) return res.status(404).json({ error: "Pedido no encontrado" });
+    const order = oh[0];
+    if (order.user_id !== req.user.id && req.user.role !== "admin") {
+      return res.status(403).json({ error: "No autorizado" });
+    }
 
-    const { rows: items } = await client.query(
-      `SELECT oi.product_id, p.name AS product_name, oi.quantity, oi.price,
-              (oi.quantity * oi.price) AS subtotal
-         FROM order_items oi
-         JOIN products p ON p.id = oi.product_id
-        WHERE oi.order_id = $1
-        ORDER BY oi.id ASC`,
-      [orderId]
+    const { rows: items } = await pool.query(
+      `SELECT
+         oi.id, oi.product_id, p.name, p.image_url,
+         oi.quantity, oi.unit_price::numeric::float8 AS unit_price,
+         (oi.quantity * oi.unit_price)::numeric::float8 AS line_total
+       FROM order_items oi
+       JOIN products p ON p.id = oi.product_id
+       WHERE oi.order_id=$1
+       ORDER BY oi.id ASC`,
+      [id]
     );
 
     res.json({ order, items });
   } catch (err) {
-    console.error("❌ GET /orders/:id:", err);
-    res.status(500).json({ error: "Error al obtener pedido" });
-  } finally {
-    client.release();
+    console.error("GET /orders/:id", err);
+    res.status(500).json({ error: "No se pudo cargar el pedido" });
   }
 });
+
 
 /**
  * PUT /orders/:id

@@ -4,6 +4,9 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
+import path from "path";
+import fs from "fs";
+import uploadsRouter from "./routes/uploads.js";
 
 // Routers
 import usersRouter from "./routes/users.js";
@@ -50,8 +53,14 @@ app.use(
   })
 );
 
-// 3) Body parser principal
-app.use(express.json({ limit: "1mb" }));
+// 3) Body parser principal (acepta json con tipos comunes y urlencoded)
+app.use(
+  express.json({
+    limit: "1mb",
+    type: ["application/json", "application/*+json", "text/plain"],
+  })
+);
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // 4) Verificación mínima de variables críticas
 const requiredEnv = ["JWT_SECRET", "STRIPE_SECRET_KEY"];
@@ -59,6 +68,14 @@ const missing = requiredEnv.filter((k) => !process.env[k]);
 if (missing.length) {
   console.warn("⚠️ Faltan variables .env:", missing.join(", "));
 }
+
+// (A) Router de uploads
+app.use("/uploads", uploadsRouter);
+
+// (B) Estático para ver/servir las imágenes subidas
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "7d" }));
 
 
 // 5) Rutas
@@ -74,10 +91,10 @@ app.use("/stats", statsRouter);
 app.use("/recommendations", recommendationsRouter);
 
 
+
 app.get("/", (_req, res) => {
   res.json({ message: "🚀 API E-commerce funcionando correctamente" });
 });
-
 
 // 404
 app.use((req, res) => {

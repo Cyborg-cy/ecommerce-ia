@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { Elements, useStripe, useElements, CardElement } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import toast from "react-hot-toast";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
@@ -41,6 +42,7 @@ function CheckoutForm() {
       alert(res.error.message || "Pago fallido");
     } else if (res.paymentIntent && res.paymentIntent.status === "succeeded") {
       alert("Pago exitoso ✅");
+      toast.success("Pago realizado");
       r.push("/orders");
     } else {
       alert("Pago en estado: " + res.paymentIntent?.status);

@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import toast from "react-hot-toast";
 
 export default function BuyBox({ productId }: { productId: number }) {
   const [qty, setQty] = useState(1);
@@ -13,6 +14,7 @@ export default function BuyBox({ productId }: { productId: number }) {
       setLoading(true);
       await api.post("/cart/add", { product_id: productId, quantity: qty });
       alert("Producto añadido al carrito ✅");
+      toast.success("Producto agregado al carrito ✅");
     } catch (e: any) {
       console.error(e);
       alert(e?.response?.data?.error || "Error al añadir al carrito ❌");
