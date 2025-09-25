@@ -32,20 +32,23 @@ app.use("/payments/webhook", stripeWebhookRouter);
 // 2) Seguridad / logs / CORS
 import url from "url";
 
+// Permitir exactos en CORS_ORIGINS y previews *.vercel.app
 const allowOrigin = (origin) => {
-  if (!origin) return true; // permite herramientas como curl o SSR sin Origin
+  if (!origin) return true; // permite curl/SSR sin Origin
   try {
-    const { hostname } = new url.URL(origin);
+    const u = new url.URL(origin);
+    const hostname = u.hostname;
+
     const whitelist = (process.env.CORS_ORIGINS || "")
       .split(",")
-      .map(s => s.trim())
+      .map((s) => s.trim())
       .filter(Boolean);
 
-    // match exactos de whitelist (produce y localhost)
+    // match exacto por origin completo (incluye protocolo y host)
     if (whitelist.includes(origin)) return true;
 
-    // previews de vercel: https://*.vercel.app
-    if (hostname.endsWith("https://ecommerce-ia.vercel.app/")) return true;
+    // previews de vercel (cualquier subdominio)
+    if (hostname.endsWith(".vercel.app")) return true;
 
     return false;
   } catch {
@@ -53,14 +56,17 @@ const allowOrigin = (origin) => {
   }
 };
 
-app.use(cors({
-  origin: (origin, cb) => (allowOrigin(origin) ? cb(null, true) : cb(new Error("CORS: Origin no permitido"))),
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
-}));
+app.use(
+  cors({
+    origin: (origin, cb) =>
+      allowOrigin(origin) ? cb(null, true) : cb(new Error("CORS: Origin no permitido")),
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
