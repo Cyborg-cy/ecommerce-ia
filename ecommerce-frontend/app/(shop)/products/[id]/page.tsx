@@ -1,5 +1,5 @@
 // app/(shop)/products/[id]/page.tsx
-import { api } from "@/lib/api-client";
+import { notFound } from "next/navigation";
 import BuyBox from "@/components/BuyBox";
 import Recommendations from "@/components/Recommendations";
 import SafeImage from "@/components/SafeImage";
@@ -13,31 +13,57 @@ type Product = {
   image_url?: string | null;
 };
 
-async function getProduct(id: string) {
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE as string;
+
+async function getProduct(id: string): Promise<Product> {
   const pid = Number.parseInt(id, 10);
   if (!Number.isInteger(pid) || pid <= 0) {
-    throw new Error("ID inválido");
+    // ID malformado -> 404
+    notFound();
   }
+
+  if (!API_BASE) {
+    // En Vercel te faltó setear la env
+    throw new Error("Falta NEXT_PUBLIC_API_BASE en el entorno de Vercel");
+  }
+
+  const url = `${API_BASE}/products/${pid}`;
+  const res = await fetch(url, { cache: "no-store" });
+
+  if (res.status === 404) {
+    notFound();
+  }
+  if (!res.ok) {
+    // Levanta un error claro para tu app/error.tsx
+    const text = await res.text().catch(() => "");
+    throw new Error(`GET ${url} -> ${res.status} ${text}`);
+  }
+
+  const data = (await res.json()) as Product;
+  return data;
+}
+
+// SEO dinámico (opcional pero recomendado)
+export async function generateMetadata({ params }: { params: { id: string } }) {
   try {
-    const { data } = await api.get(`/products/${pid}`);
-    return data as Product;
-  } catch (e: any) {
-    console.error("GET /products/:id error", {
-      status: e?.response?.status,
-      data: e?.response?.data,
-    });
-    throw new Error(e?.response?.data?.error || "No se pudo cargar el producto");
+    const p = await getProduct(params.id);
+    return {
+      title: `${p.name} | E-commerce`,
+      description: p.description ?? "",
+      openGraph: { images: p.image_url ? [p.image_url] : [] },
+    };
+  } catch {
+    // Si falla el fetch, no rompas el build/SSR
+    return { title: "Producto | E-commerce" };
   }
 }
 
 export default async function ProductDetail({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }) {
-  const { id } = await params; // Next 15
-  const p = await getProduct(id);
-  if (!p) return <p>Producto no encontrado</p>;
+  const p = await getProduct(params.id);
 
   const price =
     typeof p.price === "number" ? p.price.toFixed(2) : String(p.price ?? "");
@@ -61,14 +87,14 @@ export default async function ProductDetail({
       <div>
         <h1 className="text-3xl font-bold">{p.name}</h1>
         {p.description && (
-          <p className="text-gray-300 md:text-gray-600 mt-3">{p.description}</p>
+          <p className="text-gray-600 mt-3">{p.description}</p>
         )}
 
         <p className="text-2xl font-semibold mt-5">${price}</p>
 
         {/* Caja de compra (cliente) */}
         <div className="mt-4">
-          <BuyBox productId={Number(id)} />
+          <BuyBox productId={Number(params.id)} />
         </div>
 
         {/* Recomendaciones */}
