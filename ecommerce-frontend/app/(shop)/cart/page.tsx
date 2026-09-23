@@ -36,11 +36,11 @@ export default function CartPage() {
     } catch (e: any) {
       console.error(e);
       if (e?.response?.status === 401) {
-        alert("Debes iniciar sesión");
+        toast.error("Debes iniciar sesión");
         r.push("/login");
         return;
       }
-      alert(e?.response?.data?.error || "Error al cargar carrito");
+      toast.error(e?.response?.data?.error || "Error al cargar carrito");
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,7 @@ export default function CartPage() {
       await api.put(`/cart/item/${productId}`, { quantity });
       await load();
     } catch (e: any) {
-      alert(e?.response?.data?.error || "No se pudo actualizar");
+      toast.error(e?.response?.data?.error || "No se pudo actualizar");
     }
   }
 
@@ -66,7 +66,7 @@ export default function CartPage() {
       await api.delete(`/cart/item/${productId}`);
       await load();
     } catch (e: any) {
-      alert(e?.response?.data?.error || "No se pudo eliminar");
+      toast.error(e?.response?.data?.error || "No se pudo eliminar");
     }
   }
 
@@ -76,54 +76,66 @@ export default function CartPage() {
 
   if (!token) {
     return (
-      <div className="p-6">
-        <p>
-          Debes <Link href="/login" className="underline">iniciar sesión</Link> para ver tu carrito.
+      <div className="max-w-2xl mx-auto px-6 py-16 text-center">
+        <p className="text-muted">
+          Debes{" "}
+          <Link href="/login" className="text-accent hover:underline">
+            iniciar sesión
+          </Link>{" "}
+          para ver tu carrito.
         </p>
       </div>
     );
   }
 
-  if (loading) return <div className="p-6">Cargando...</div>;
+  if (loading) return <div className="max-w-2xl mx-auto px-6 py-16 text-muted">Cargando...</div>;
 
   if (!data || data.items.length === 0) {
     return (
-      <div className="p-6 space-y-4">
-        <p>Tu carrito está vacío.</p>
-        <Link href="/products" className="underline">Ver productos</Link>
+      <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-4">
+        <p className="text-muted">Tu carrito está vacío.</p>
+        <Link href="/products" className="text-accent hover:underline text-sm">
+          Ver productos
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Tu carrito</h1>
-      <ul className="space-y-3">
+    <div className="max-w-2xl mx-auto px-6 py-10">
+      <h1 className="font-serif text-2xl mb-6">Tu carrito</h1>
+      <ul className="divide-y divide-border border-y border-border">
         {data.items.map((it) => (
-          <li key={it.product_id} className="border rounded p-3 flex items-center justify-between">
+          <li key={it.product_id} className="py-4 flex items-center justify-between gap-4">
             <div>
               <div className="font-medium">{it.name}</div>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted mt-0.5">
                 ${Number(it.price).toFixed(2)} c/u
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center border border-border rounded-md">
+                <button
+                  className="w-8 h-8 hover:bg-background text-sm"
+                  onClick={() => changeQty(it.product_id, Math.max(1, it.quantity - 1))}
+                >
+                  −
+                </button>
+                <span className="w-8 text-center text-sm">{it.quantity}</span>
+                <button
+                  className="w-8 h-8 hover:bg-background text-sm"
+                  onClick={() => changeQty(it.product_id, it.quantity + 1)}
+                >
+                  +
+                </button>
+              </div>
               <button
-                className="px-2 py-1 border rounded"
-                onClick={() => changeQty(it.product_id, Math.max(1, it.quantity - 1))}
-              >-</button>
-              <span>{it.quantity}</span>
-              <button
-                className="px-2 py-1 border rounded"
-                onClick={() => changeQty(it.product_id, it.quantity + 1)}
-              >+</button>
-              <button
-                className="px-3 py-1 border rounded bg-red-50"
+                className="text-sm text-muted hover:text-red-600 transition-colors"
                 onClick={() => removeItem(it.product_id)}
               >
                 Quitar
               </button>
-              <div className="w-24 text-right font-semibold">
+              <div className="w-20 text-right font-medium">
                 ${Number(it.subtotal).toFixed(2)}
               </div>
             </div>
@@ -131,13 +143,17 @@ export default function CartPage() {
         ))}
       </ul>
 
-      <div className="text-right text-xl font-bold">
-        Total: ${Number(data.total).toFixed(2)}
+      <div className="flex items-center justify-between mt-6">
+        <span className="text-muted">Total</span>
+        <span className="font-serif text-2xl">${Number(data.total).toFixed(2)}</span>
       </div>
 
-      <div className="text-right">
-     <button onClick={() => r.push("/checkout")}>Ir a pagar</button>
-      </div>
+      <button
+        onClick={goCheckout}
+        className="w-full mt-6 rounded-md px-4 py-3 bg-foreground text-background text-sm font-medium hover:opacity-90"
+      >
+        Ir a pagar
+      </button>
     </div>
   );
 }

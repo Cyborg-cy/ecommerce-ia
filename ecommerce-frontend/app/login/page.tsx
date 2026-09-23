@@ -24,7 +24,7 @@ function LoginInner() {
   useEffect(() => {
     const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (t) {
-      const next = sp.get("next") || "/admin"; // vuelve a donde ibas (por defecto /admin)
+      const next = sp.get("next") || "/"; // vuelve a donde ibas (por defecto home)
       r.replace(next);
       return;
     }
@@ -45,7 +45,7 @@ function LoginInner() {
 
       toast.success("Bienvenido!");
 
-      const next = sp.get("next") || "/admin";
+      const next = sp.get("next") || "/";
       r.replace(next);
     } catch (err: any) {
       setMsg(err?.response?.data?.error || err?.message || "Error al iniciar sesión");
@@ -55,14 +55,15 @@ function LoginInner() {
   };
 
   return (
-    <div className="p-6 max-w-md mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Entrar</h1>
-      <form onSubmit={submit} className="space-y-3">
+    <div className="max-w-sm mx-auto px-6 py-16">
+      <h1 className="font-serif text-3xl mb-1">Entrar</h1>
+      <p className="text-muted text-sm mb-8">Accede a tu cuenta para ver tus pedidos y carrito.</p>
+      <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="block text-sm mb-1">Email</label>
+          <label className="block text-sm mb-1.5 text-foreground/80">Email</label>
           <input
             type="email"
-            className="w-full border rounded px-3 py-2"
+            className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -70,10 +71,10 @@ function LoginInner() {
           />
         </div>
         <div>
-          <label className="block text-sm mb-1">Contraseña</label>
+          <label className="block text-sm mb-1.5 text-foreground/80">Contraseña</label>
           <input
             type="password"
-            className="w-full border rounded px-3 py-2"
+            className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -81,16 +82,22 @@ function LoginInner() {
           />
         </div>
 
-        {msg && <p className="text-red-600 text-sm">{msg}</p>}
+        {msg && <p className="text-sm text-red-600">{msg}</p>}
 
         <button
           type="submit"
           disabled={loading}
-          className="px-4 py-2 rounded bg-black text-white disabled:opacity-60"
+          className="w-full rounded-md px-4 py-2.5 bg-foreground text-background text-sm font-medium hover:opacity-90 disabled:opacity-50"
         >
           {loading ? "Entrando..." : "Entrar"}
         </button>
       </form>
+      <p className="text-sm text-muted mt-6">
+        ¿No tienes cuenta?{" "}
+        <a href="/register" className="text-accent hover:underline">
+          Crea una
+        </a>
+      </p>
     </div>
   );
 }

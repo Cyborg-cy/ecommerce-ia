@@ -40,14 +40,14 @@ export default function OrderDetailPage() {
     try {
       const orderId = params?.id;
       if (!orderId) {
-        r.replace("/orders");
+        r.replace("/account/orders");
         return;
       }
       const { data } = await api.get(`/orders/${orderId}`);
       setOrder(data as Order);
     } catch (e) {
       console.error(e);
-      r.replace("/orders");
+      r.replace("/account/orders");
     } finally {
       setLoading(false);
     }
@@ -60,30 +60,29 @@ export default function OrderDetailPage() {
 
   return (
     <RequireAuth>
-      <div className="p-6 space-y-4">
-        <Link href="/orders" className="underline">← Volver</Link>
-        <h1 className="text-2xl font-bold">Pedido #{params?.id}</h1>
+      <div className="max-w-2xl mx-auto px-6 py-10">
+        <Link href="/account/orders" className="text-sm text-muted hover:text-foreground transition-colors">
+          ← Volver
+        </Link>
+        <h1 className="font-serif text-2xl mt-3 mb-4">Pedido #{params?.id}</h1>
 
         {loading ? (
-          <p>Cargando…</p>
+          <p className="text-muted">Cargando…</p>
         ) : !order ? (
-          <p>No se encontró el pedido.</p>
+          <p className="text-muted">No se encontró el pedido.</p>
         ) : (
           <>
-            <div className="text-sm text-gray-600">
-              Fecha: {order.created_at ? new Date(order.created_at).toLocaleString() : "-"}
+            <div className="text-sm text-muted">
+              {order.created_at ? new Date(order.created_at).toLocaleString() : "-"}
             </div>
-            <div className="space-x-2">
-              <span>Estado: <b>{order.status ?? "pendiente"}</b></span>
-              <span>· Pago: <b>{order.payment_status ?? "desconocido"}</b></span>
-              {order.currency && <span>· Moneda: <b>{order.currency.toUpperCase()}</b></span>}
-              {order.stripe_payment_intent_id && (
-                <span>· PI: <code className="text-xs">{order.stripe_payment_intent_id}</code></span>
-              )}
+            <div className="text-sm text-muted mt-1 space-x-1">
+              <span>Estado: <span className="text-foreground">{order.status ?? "pendiente"}</span></span>
+              <span>· Pago: <span className="text-foreground">{order.payment_status ?? "desconocido"}</span></span>
+              {order.currency && <span>· Moneda: <span className="text-foreground">{order.currency.toUpperCase()}</span></span>}
             </div>
 
-            <h2 className="text-lg font-semibold mt-4">Productos</h2>
-            <ul className="divide-y">
+            <h2 className="font-serif text-lg mt-8 mb-2">Productos</h2>
+            <ul className="divide-y divide-border border-y border-border">
               {(order.items ?? []).map((it, idx) => {
                 const priceNum =
                   typeof it.price === "string" ? parseFloat(it.price) : Number(it.price);
@@ -100,23 +99,21 @@ export default function OrderDetailPage() {
                   <li key={key} className="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="font-medium">{it.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {it.product_id ? `#${it.product_id}` : (it.id ? `item:${it.id}` : "item")}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        Cantidad: <b>{qty}</b> · Precio unitario: <b>${money(unit)}</b>
+                      <div className="text-sm text-muted">
+                        Cantidad: {qty} · ${money(unit)} c/u
                       </div>
                     </div>
-                    <div className="font-semibold sm:text-right">
-                      Subtotal: ${money(subtotal)}
+                    <div className="font-medium sm:text-right">
+                      ${money(subtotal)}
                     </div>
                   </li>
                 );
               })}
             </ul>
 
-            <div className="text-right text-xl font-bold mt-4">
-              Total: ${money(order.total)}
+            <div className="flex items-center justify-between mt-6">
+              <span className="text-muted">Total</span>
+              <span className="font-serif text-2xl">${money(order.total)}</span>
             </div>
           </>
         )}

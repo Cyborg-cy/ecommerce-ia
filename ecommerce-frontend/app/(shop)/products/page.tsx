@@ -135,15 +135,16 @@ export default async function ProductsPage(props: {
   const nextHref = buildHref(next);
 
   return (
-    <div className="p-4">
+    <div className="max-w-6xl mx-auto px-6 py-10">
+      <h1 className="font-serif text-2xl mb-6">Productos</h1>
       <Filters />
 
       {items.length === 0 ? (
-        <div className="text-gray-500 mt-6">
+        <div className="text-muted mt-10 text-center">
           No se encontraron productos para mostrar.
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 mt-8">
           {items.map((p) => (
             <ProductCard key={p.id} p={p} />
           ))}

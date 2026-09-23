@@ -89,10 +89,10 @@ export default function Filters() {
   return (
     <div className="flex flex-wrap gap-3 items-end">
       <div className="flex flex-col">
-        <label htmlFor="q" className="text-sm">Buscar</label>
+        <label htmlFor="q" className="text-xs text-muted mb-1">Buscar</label>
         <input
           id="q"
-          className="border rounded px-2 py-1"
+          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm focus:border-accent"
           placeholder="Nombre o descripción..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -101,10 +101,10 @@ export default function Filters() {
       </div>
 
       <div className="flex flex-col">
-        <label htmlFor="min" className="text-sm">Min $</label>
+        <label htmlFor="min" className="text-xs text-muted mb-1">Min $</label>
         <input
           id="min"
-          className="border rounded px-2 py-1"
+          className="w-24 rounded-md border border-border bg-surface px-3 py-1.5 text-sm focus:border-accent"
           type="number"
           inputMode="decimal"
           value={min}
@@ -114,10 +114,10 @@ export default function Filters() {
       </div>
 
       <div className="flex flex-col">
-        <label htmlFor="max" className="text-sm">Max $</label>
+        <label htmlFor="max" className="text-xs text-muted mb-1">Max $</label>
         <input
           id="max"
-          className="border rounded px-2 py-1"
+          className="w-24 rounded-md border border-border bg-surface px-3 py-1.5 text-sm focus:border-accent"
           type="number"
           inputMode="decimal"
           value={max}
@@ -128,10 +128,10 @@ export default function Filters() {
 
       {/* Opcional: selector de categoría si usas category_id en los productos */}
       <div className="flex flex-col">
-        <label htmlFor="category" className="text-sm">Categoría</label>
+        <label htmlFor="category" className="text-xs text-muted mb-1">Categoría</label>
         <select
           id="category"
-          className="border rounded px-2 py-1"
+          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm focus:border-accent"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
         >
@@ -147,14 +147,14 @@ export default function Filters() {
       </div>
 
       <button
-        className="bg-black text-white px-3 py-2 rounded"
+        className="rounded-md px-4 py-1.5 bg-foreground text-background text-sm font-medium hover:opacity-90"
         onClick={apply}
       >
         Aplicar
       </button>
 
       <button
-        className="px-3 py-2 rounded border"
+        className="rounded-md px-4 py-1.5 border border-border text-sm hover:bg-background"
         onClick={clearAll}
       >
         Limpiar

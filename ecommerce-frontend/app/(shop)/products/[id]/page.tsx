@@ -69,38 +69,40 @@ export default async function ProductDetail({
     typeof p.price === "number" ? p.price.toFixed(2) : String(p.price ?? "");
 
   return (
-    <div className="max-w-5xl mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* Imagen */}
-      <div className="bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden min-h-[260px]">
-        {p.image_url ? (
-          <SafeImage
-            src={p.image_url}
-            alt={p.name}
-            className="max-h-[460px] w-auto object-contain"
-          />
-        ) : (
-          <span className="text-gray-400 text-sm">Sin imagen</span>
-        )}
+    <div className="max-w-5xl mx-auto px-6 py-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        {/* Imagen */}
+        <div className="bg-background border border-border rounded-lg flex items-center justify-center overflow-hidden min-h-[320px] aspect-square">
+          {p.image_url ? (
+            <SafeImage
+              src={p.image_url}
+              alt={p.name}
+              className="max-h-[460px] w-auto object-contain"
+            />
+          ) : (
+            <span className="text-muted text-sm">Sin imagen</span>
+          )}
+        </div>
+
+        {/* Info */}
+        <div>
+          <h1 className="font-serif text-3xl leading-tight">{p.name}</h1>
+          {p.description && (
+            <p className="text-muted mt-3 leading-relaxed">{p.description}</p>
+          )}
+
+          <p className="font-serif text-3xl text-accent mt-6">${price}</p>
+
+          {/* Caja de compra (cliente) */}
+          <div className="mt-6">
+            <BuyBox productId={Number(params.id)} />
+          </div>
+        </div>
       </div>
 
-      {/* Info */}
-      <div>
-        <h1 className="text-3xl font-bold">{p.name}</h1>
-        {p.description && (
-          <p className="text-gray-600 mt-3">{p.description}</p>
-        )}
-
-        <p className="text-2xl font-semibold mt-5">${price}</p>
-
-        {/* Caja de compra (cliente) */}
-        <div className="mt-4">
-          <BuyBox productId={Number(params.id)} />
-        </div>
-
-        {/* Recomendaciones */}
-        <div className="mt-8">
-          <Recommendations productId={p.id} />
-        </div>
+      {/* Recomendaciones */}
+      <div className="mt-16">
+        <Recommendations productId={p.id} />
       </div>
     </div>
   );

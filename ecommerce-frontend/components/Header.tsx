@@ -4,7 +4,22 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api-client";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+
+function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const pathname = usePathname();
+  const active = pathname === href;
+  return (
+    <Link
+      href={href}
+      className={`text-sm transition-colors ${
+        active ? "text-accent font-medium" : "text-foreground/70 hover:text-foreground"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
 
 export default function Header() {
   const { token, user, logout } = useAuth();
@@ -36,46 +51,55 @@ export default function Header() {
   }
 
   return (
-    <header className="border-b">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-6">
         {/* Izquierda: marca / navegación */}
-        <nav className="flex items-center gap-4">
-          <Link href="/" className="font-semibold">Tienda</Link>
-          <Link href="/products" className="text-sm text-gray-700 hover:underline">
-            Productos
+        <nav className="flex items-center gap-6">
+          <Link href="/" className="font-serif text-lg tracking-tight">
+            Tienda
           </Link>
-          {token && (
-            <Link href="/account/orders" className="text-sm text-gray-700 hover:underline">
-  Mis pedidos
-</Link>
-          )}
-          {token && cartCount > 0 && (
-            <Link href="/cart" className="text-sm text-gray-700 hover:underline">
-  Carrito ({cartCount})
-</Link>
-          )}
+          <div className="hidden sm:flex items-center gap-5">
+            <NavLink href="/products">Productos</NavLink>
+            {token && <NavLink href="/account/orders">Mis pedidos</NavLink>}
+          </div>
         </nav>
 
-        {/* Derecha: sesión */}
-        <div className="flex items-center gap-3">
+        {/* Derecha: carrito / sesión */}
+        <div className="flex items-center gap-4">
+          {token && (
+            <Link
+              href="/cart"
+              className="relative text-sm text-foreground/70 hover:text-foreground transition-colors"
+            >
+              Carrito
+              {cartCount > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-accent text-accent-foreground text-xs font-medium">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+          )}
+
           {token ? (
             <>
-              <span className="text-sm text-gray-600">
+              <span className="hidden md:inline text-sm text-muted">
                 {user?.name ? `Hola, ${user.name}` : "Sesión activa"}
               </span>
               <button
                 onClick={handleLogout}
-                className="px-3 py-1 rounded bg-black text-white text-sm"
+                className="px-3.5 py-1.5 rounded-md border border-border text-sm hover:bg-foreground hover:text-background hover:border-foreground"
               >
                 Salir
               </button>
             </>
           ) : (
             <>
-              <Link href="/login" className="text-sm hover:underline">Entrar</Link>
+              <Link href="/login" className="text-sm text-foreground/70 hover:text-foreground transition-colors">
+                Entrar
+              </Link>
               <Link
                 href="/register"
-                className="px-3 py-1 rounded bg-black text-white text-sm"
+                className="px-3.5 py-1.5 rounded-md bg-foreground text-background text-sm hover:opacity-90"
               >
                 Crear cuenta
               </Link>

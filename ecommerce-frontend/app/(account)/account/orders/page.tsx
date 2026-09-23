@@ -40,36 +40,38 @@ export default function OrdersPage() {
 
   return (
     <RequireAuth>
-      <div className="p-6 space-y-4">
-        <h1 className="text-2xl font-bold">Mis pedidos</h1>
+      <div className="max-w-3xl mx-auto px-6 py-10">
+        <h1 className="font-serif text-2xl mb-6">Mis pedidos</h1>
 
         {loading ? (
-          <p>Cargando…</p>
+          <p className="text-muted">Cargando…</p>
         ) : orders.length === 0 ? (
-          <p>No tienes pedidos aún.</p>
+          <p className="text-muted">No tienes pedidos aún.</p>
         ) : (
           <ul className="space-y-3">
             {orders.map((o) => (
-              <li key={o.id} className="border rounded p-4 flex items-center justify-between">
+              <li
+                key={o.id}
+                className="rounded-lg border border-border bg-surface p-4 flex items-center justify-between"
+              >
                 <div className="space-y-1">
-                  <div className="font-semibold">Pedido #{o.id}</div>
-                  <div className="text-sm text-gray-500">
-                    Fecha: {new Date(o.created_at).toLocaleString()}
+                  <div className="font-medium">Pedido #{o.id}</div>
+                  <div className="text-sm text-muted">
+                    {new Date(o.created_at).toLocaleString()}
                   </div>
-                  <div className="text-sm">
-                    Estado: <span className="font-medium">{o.status ?? "pendiente"}</span>
+                  <div className="text-sm text-muted">
+                    Estado: <span className="text-foreground">{o.status ?? "pendiente"}</span>
                     {" · "}
-                    Pago: <span className="font-medium">{o.payment_status ?? "desconocido"}</span>
+                    Pago: <span className="text-foreground">{o.payment_status ?? "desconocido"}</span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold">
-                    Total: $
-                    {typeof o.total === "string" ? o.total : o.total.toFixed(2)}
+                  <div className="font-serif text-lg">
+                    ${typeof o.total === "string" ? o.total : o.total.toFixed(2)}
                   </div>
                   <Link
                     href={`/account/orders/${o.id}`}
-                    className="inline-block mt-2 px-3 py-1 border rounded hover:bg-gray-50"
+                    className="inline-block mt-2 text-sm text-accent hover:underline"
                   >
                     Ver detalle
                   </Link>

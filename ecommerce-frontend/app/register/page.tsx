@@ -37,37 +37,50 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="p-6 max-w-md mx-auto">
-      <h1 className="text-xl font-bold mb-4">Crear cuenta</h1>
-      <form onSubmit={submit} className="space-y-3">
-        <input
-          className="border w-full p-2"
-          placeholder="Nombre"
-          value={name}
-          onChange={(e)=>setName(e.target.value)}
-          required
-        />
-        <input
-          className="border w-full p-2"
-          placeholder="Email"
-          type="email"
-          value={email}
-          onChange={(e)=>setEmail(e.target.value)}
-          required
-        />
-        <input
-          className="border w-full p-2"
-          type="password"
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e)=>setPassword(e.target.value)}
-          required
-        />
-        <button className="px-4 py-2 bg-black text-white rounded">
+    <div className="max-w-sm mx-auto px-6 py-16">
+      <h1 className="font-serif text-3xl mb-1">Crear cuenta</h1>
+      <p className="text-muted text-sm mb-8">Regístrate para comprar y ver tu historial de pedidos.</p>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <label className="block text-sm mb-1.5 text-foreground/80">Nombre</label>
+          <input
+            className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+            value={name}
+            onChange={(e)=>setName(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm mb-1.5 text-foreground/80">Email</label>
+          <input
+            className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+            type="email"
+            value={email}
+            onChange={(e)=>setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm mb-1.5 text-foreground/80">Contraseña</label>
+          <input
+            className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+            type="password"
+            value={password}
+            onChange={(e)=>setPassword(e.target.value)}
+            required
+          />
+        </div>
+        <button className="w-full rounded-md px-4 py-2.5 bg-foreground text-background text-sm font-medium hover:opacity-90">
           Crear cuenta
         </button>
       </form>
-      {msg && <p className="mt-3 text-sm text-gray-600">{msg}</p>}
+      {msg && <p className="mt-4 text-sm text-muted">{msg}</p>}
+      <p className="text-sm text-muted mt-6">
+        ¿Ya tienes cuenta?{" "}
+        <a href="/login" className="text-accent hover:underline">
+          Entra
+        </a>
+      </p>
     </div>
   );
 }

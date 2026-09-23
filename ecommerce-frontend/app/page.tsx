@@ -1,5 +1,6 @@
 // app/page.tsx
 import Link from "next/link";
+import ProductCard from "@/components/ProductCard";
 
 // Evita prerender estático que tronaba con fetch dinámico
 export const dynamic = "force-dynamic";
@@ -40,45 +41,42 @@ export default async function HomePage() {
   const products = await getProducts();
 
   return (
-    <main className="p-6 space-y-8">
-      {/* Hero simple */}
-      <section className="rounded-2xl p-8 bg-gray-100">
-        <h1 className="text-3xl text-gray-600">Bienvenido a ALWAYS BUY</h1>
-        <p className="text-gray-600">Ofertas y novedades cada semana.</p>
-        <div className="mt-4">
-          <Link
-            href="/products"
-            className="inline-block rounded-lg px-4 py-2 bg-black text-white"
-          >
-            Ver productos
-          </Link>
+    <main>
+      {/* Hero */}
+      <section className="border-b border-border bg-surface">
+        <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
+          <div className="max-w-lg">
+            <p className="text-sm text-accent font-medium mb-3">Nueva colección</p>
+            <h1 className="font-serif text-4xl md:text-5xl leading-[1.1] mb-5">
+              Cosas buenas, elegidas con cuidado.
+            </h1>
+            <p className="text-muted text-lg mb-8 max-w-md">
+              Productos seleccionados, precios claros y envíos que llegan cuando dicen que llegan.
+            </p>
+            <Link
+              href="/products"
+              className="inline-flex items-center gap-2 rounded-md px-5 py-3 bg-foreground text-background text-sm font-medium hover:opacity-90"
+            >
+              Ver productos
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* Destacados */}
-      <section>
-        <h2 className="text-xl font-semibold mb-4">Destacados</h2>
+      <section className="max-w-6xl mx-auto px-6 py-16">
+        <div className="flex items-end justify-between mb-8">
+          <h2 className="font-serif text-2xl">Destacados</h2>
+          <Link href="/products" className="text-sm text-muted hover:text-foreground transition-colors">
+            Ver todo
+          </Link>
+        </div>
         {products.length === 0 ? (
-          <p className="text-gray-500">No hay productos para mostrar.</p>
+          <p className="text-muted">No hay productos para mostrar.</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
             {products.slice(0, 6).map((p: Product) => (
-              <Link
-                key={p.id}
-                href={`/products/${p.id}`}
-                className="border rounded-xl p-4 hover:shadow"
-              >
-                <div className="font-medium">{p.name}</div>
-                <div className="text-sm text-gray-500">
-                  {p.category_name || "General"}
-                </div>
-                <div className="mt-2 font-semibold">
-                  $
-                  {typeof p.price === "number"
-                    ? p.price.toFixed(2)
-                    : p.price}
-                </div>
-              </Link>
+              <ProductCard key={p.id} p={p} />
             ))}
           </div>
         )}
