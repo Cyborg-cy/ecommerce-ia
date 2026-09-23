@@ -1,6 +1,5 @@
 "use client";
 
-import AdminGate from "@/components/AdminGate";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -79,64 +78,62 @@ export default function AdminProductsPage() {
   }
 
   return (
-    <AdminGate>
-      <div className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Productos</h1>
-          <Link href="/admin/products/new" className="px-3 py-1 rounded bg-black text-white text-sm">
-            Nuevo
-          </Link>
-        </div>
-
-        {loading ? (
-          <p>Cargando…</p>
-        ) : err ? (
-          <p className="text-red-600 text-sm">{err}</p>
-        ) : (
-          <div className="overflow-auto">
-            <table className="min-w-[900px] w-full border">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="p-2 border text-left">ID</th>
-                  <th className="p-2 border text-left">Nombre</th>
-                  <th className="p-2 border text-left">Precio</th>
-                  <th className="p-2 border text-left">Stock</th>
-                  <th className="p-2 border text-left">Categoría</th>
-                  <th className="p-2 border text-left">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((p) => (
-                  <tr key={p.id} className="border-t">
-                    <td className="p-2 border">{p.id}</td>
-                    <td className="p-2 border">{p.name}</td>
-                    <td className="p-2 border">
-                      {typeof p.price === "number" ? p.price.toFixed(2) : p.price}
-                    </td>
-                    <td className="p-2 border">{p.stock}</td>
-                    <td className="p-2 border">{p.category_id ?? "—"}</td>
-                    <td className="p-2 border">
-                      <Link href={`/admin/products/${p.id}`} className="underline text-sm mr-3">
-                        Editar
-                      </Link>
-                      <button onClick={() => delProduct(p.id)} className="text-sm text-red-600 underline">
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {items.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-4 text-center text-gray-500">
-                      Sin productos
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="font-serif text-2xl">Productos</h1>
+        <Link href="/admin/products/new" className="px-3.5 py-1.5 rounded-md bg-accent text-accent-foreground text-sm font-medium hover:bg-accent-hover">
+          Nuevo
+        </Link>
       </div>
-    </AdminGate>
+
+      {loading ? (
+        <p className="text-muted">Cargando…</p>
+      ) : err ? (
+        <p className="text-red-600 text-sm">{err}</p>
+      ) : (
+        <div className="overflow-auto rounded-lg border border-border bg-surface">
+          <table className="min-w-[900px] w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted uppercase tracking-wide">
+                <th className="px-4 py-3 font-medium">ID</th>
+                <th className="px-4 py-3 font-medium">Nombre</th>
+                <th className="px-4 py-3 font-medium">Precio</th>
+                <th className="px-4 py-3 font-medium">Stock</th>
+                <th className="px-4 py-3 font-medium">Categoría</th>
+                <th className="px-4 py-3 font-medium">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {items.map((p) => (
+                <tr key={p.id} className="hover:bg-background">
+                  <td className="px-4 py-3 text-muted">{p.id}</td>
+                  <td className="px-4 py-3 font-medium">{p.name}</td>
+                  <td className="px-4 py-3">
+                    ${typeof p.price === "number" ? p.price.toFixed(2) : p.price}
+                  </td>
+                  <td className="px-4 py-3">{p.stock}</td>
+                  <td className="px-4 py-3 text-muted">{p.category_id ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <Link href={`/admin/products/${p.id}`} className="text-accent hover:underline mr-4">
+                      Editar
+                    </Link>
+                    <button onClick={() => delProduct(p.id)} className="text-red-600 hover:underline">
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                    Sin productos
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

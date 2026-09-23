@@ -1,6 +1,5 @@
 "use client";
 
-import AdminGate from "@/components/AdminGate";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -110,115 +109,115 @@ export default function AdminOrderDetailPage() {
   const fmt = (n?: number | null) =>
     n == null ? "—" : `$${Number(n).toFixed(2)}`;
 
-  if (loading) return <AdminGate><div className="p-6">Cargando…</div></AdminGate>;
-  if (!order) return <AdminGate><div className="p-6">Pedido no encontrado</div></AdminGate>;
+  if (loading) return <div className="text-muted">Cargando…</div>;
+  if (!order) return <div className="text-muted">Pedido no encontrado</div>;
 
   return (
-    <AdminGate>
-      <div className="p-6 space-y-4">
-        <a href="/admin/orders" className="underline text-sm">← Volver</a>
+    <div className="space-y-6">
+      <a href="/admin/orders" className="text-sm text-muted hover:text-foreground transition-colors">← Volver</a>
 
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Pedido #{order.id}</h1>
-          <div className="flex items-center gap-2">
-            <span className="text-sm">Estado:</span>
-            <span className="px-2 py-0.5 border rounded-full text-xs">{order.status}</span>
-            <select
-              className="border rounded px-2 py-1 text-sm"
-              disabled={updating}
-              defaultValue=""
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v) changeStatus(v);
-                e.currentTarget.value = "";
-              }}
-            >
-              <option value="">Cambiar a…</option>
-              {STATUSES.filter(s => s !== order.status).map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="font-serif text-2xl">Pedido #{order.id}</h1>
+        <div className="flex items-center gap-3">
+          <span className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-accent/10 text-accent">
+            {order.status}
+          </span>
+          <select
+            className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm focus:border-accent"
+            disabled={updating}
+            defaultValue=""
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v) changeStatus(v);
+              e.currentTarget.value = "";
+            }}
+          >
+            <option value="">Cambiar a…</option>
+            {STATUSES.filter(s => s !== order.status).map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
+      </div>
 
-        {/* Cabecera */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="rounded border p-3">
-            <div className="text-xs text-gray-500">Usuario</div>
-            <div className="font-medium">{order.email ?? "—"}</div>
-            <div className="text-xs text-gray-500 mt-2">Fecha</div>
-            <div>{order.created_at ? new Date(order.created_at).toLocaleString() : "—"}</div>
-          </div>
-          <div className="rounded border p-3 md:col-span-2">
-            <div className="text-xs text-gray-500">Envío</div>
-            <div className="mt-1">
-              <div>{order.shipping_name || "—"}</div>
-              <div className="text-sm text-gray-600">
-                {order.shipping_address || "—"}{order.shipping_city ? `, ${order.shipping_city}` : ""}
-                {order.shipping_zip ? `, ${order.shipping_zip}` : ""}
-              </div>
-              <div className="text-sm text-gray-600">{order.shipping_phone || "—"}</div>
-            </div>
-          </div>
+      {/* Cabecera */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <div className="text-xs text-muted uppercase tracking-wide">Usuario</div>
+          <div className="font-medium mt-1">{order.email ?? "—"}</div>
+          <div className="text-xs text-muted uppercase tracking-wide mt-3">Fecha</div>
+          <div className="mt-1">{order.created_at ? new Date(order.created_at).toLocaleString() : "—"}</div>
         </div>
-
-        {/* Items */}
-        <div className="overflow-auto">
-          <table className="min-w-[800px] w-full border">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="p-2 border text-left">Producto</th>
-                <th className="p-2 border text-left">Unidad</th>
-                <th className="p-2 border text-left">Cantidad</th>
-                <th className="p-2 border text-left">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map(it => (
-                <tr key={it.id} className="border-t">
-                  <td className="p-2 border">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-                        {it.image_url ? (
-                          <img src={it.image_url} alt={it.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-xs text-gray-400">Sin img</span>
-                        )}
-                      </div>
-                      <div>
-                        <div className="font-medium">{it.name}</div>
-                        <div className="text-xs text-gray-500">ID: {it.product_id}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-2 border">{fmt(it.unit_price)}</td>
-                  <td className="p-2 border">{it.quantity}</td>
-                  <td className="p-2 border">{fmt(it.line_total)}</td>
-                </tr>
-              ))}
-              {items.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="p-4 text-center text-gray-500">Sin items</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Total */}
-        <div className="flex justify-end">
-          <div className="rounded border p-4 w-full sm:w-80">
-            <div className="flex justify-between text-sm text-gray-600">
-              <span>Subtotal</span>
-              <span>{fmt(items.reduce((s, it) => s + (it.line_total || 0), 0))}</span>
+        <div className="rounded-lg border border-border bg-surface p-4 md:col-span-2">
+          <div className="text-xs text-muted uppercase tracking-wide">Envío</div>
+          <div className="mt-1">
+            <div className="font-medium">{order.shipping_name || "—"}</div>
+            <div className="text-sm text-muted">
+              {order.shipping_address || "—"}{order.shipping_city ? `, ${order.shipping_city}` : ""}
+              {order.shipping_zip ? `, ${order.shipping_zip}` : ""}
             </div>
-            <div className="flex justify-between text-lg font-semibold mt-2">
-              <span>Total</span>
-              <span>{fmt(order.total)}</span>
-            </div>
+            <div className="text-sm text-muted">{order.shipping_phone || "—"}</div>
           </div>
         </div>
       </div>
-    </AdminGate>
+
+      {/* Items */}
+      <div className="overflow-auto rounded-lg border border-border bg-surface">
+        <table className="min-w-[800px] w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-muted uppercase tracking-wide">
+              <th className="px-4 py-3 font-medium">Producto</th>
+              <th className="px-4 py-3 font-medium">Unidad</th>
+              <th className="px-4 py-3 font-medium">Cantidad</th>
+              <th className="px-4 py-3 font-medium">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {items.map(it => (
+              <tr key={it.id}>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-md border border-border bg-background overflow-hidden flex items-center justify-center shrink-0">
+                      {it.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={it.image_url} alt={it.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-[10px] text-muted">Sin img</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-medium">{it.name}</div>
+                      <div className="text-xs text-muted">ID: {it.product_id}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3">{fmt(it.unit_price)}</td>
+                <td className="px-4 py-3">{it.quantity}</td>
+                <td className="px-4 py-3 font-medium">{fmt(it.line_total)}</td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-center text-muted">Sin items</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Total */}
+      <div className="flex justify-end">
+        <div className="rounded-lg border border-border bg-surface p-4 w-full sm:w-80">
+          <div className="flex justify-between text-sm text-muted">
+            <span>Subtotal</span>
+            <span>{fmt(items.reduce((s, it) => s + (it.line_total || 0), 0))}</span>
+          </div>
+          <div className="flex justify-between mt-2">
+            <span className="text-muted">Total</span>
+            <span className="font-serif text-xl">{fmt(order.total)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

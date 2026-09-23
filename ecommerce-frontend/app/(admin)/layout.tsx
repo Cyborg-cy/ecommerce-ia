@@ -10,8 +10,8 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   return (
     <Link
       href={href}
-      className={`px-3 py-2 rounded text-sm ${
-        active ? "bg-black text-white" : "hover:bg-gray-100"
+      className={`px-3 py-2 rounded-md text-sm transition-colors ${
+        active ? "bg-accent text-accent-foreground" : "text-white/70 hover:text-white hover:bg-white/10"
       }`}
     >
       {children}
@@ -22,15 +22,15 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <AdminGate>
-      <div className="min-h-screen bg-white">
-        <header className="border-b">
-          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link href="/" className="font-semibold">E-Commerce</Link>
-              <span className="text-gray-300">/</span>
-              <span className="font-medium">Admin</span>
+      <div className="min-h-screen bg-background">
+        <header className="bg-foreground text-white">
+          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-6">
+            <div className="flex items-center gap-3 shrink-0">
+              <Link href="/" className="font-serif text-lg">Tienda</Link>
+              <span className="text-white/30">/</span>
+              <span className="text-sm text-white/70">Admin</span>
             </div>
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-1 overflow-x-auto">
               <NavLink href="/admin">Dashboard</NavLink>
               <NavLink href="/admin/products">Productos</NavLink>
               <NavLink href="/admin/orders">Pedidos</NavLink>
@@ -40,7 +40,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
       </div>
     </AdminGate>
   );

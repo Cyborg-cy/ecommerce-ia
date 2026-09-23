@@ -1,9 +1,23 @@
 "use client";
 
-import AdminGate from "@/components/AdminGate";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import Link from "next/link";
+
+const STATUS_STYLES: Record<string, string> = {
+  pending: "bg-muted/15 text-muted",
+  paid: "bg-accent/10 text-accent",
+  shipped: "bg-green-600/10 text-green-700",
+  cancelled: "bg-red-600/10 text-red-600",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status] || "bg-muted/15 text-muted"}`}>
+      {status}
+    </span>
+  );
+}
 
 type Order = {
   id: number;
@@ -130,134 +144,128 @@ export default function AdminOrdersPage() {
   }
 
   return (
-    <AdminGate>
-      <div className="p-6 space-y-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold">Pedidos</h1>
-          <div className="flex items-end gap-2">
-            <div>
-              <label className="block text-xs text-gray-500">Estado</label>
-              <select
-                className="border rounded px-2 py-1"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500">Desde</label>
-              <input
-                type="date"
-                className="border rounded px-2 py-1"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                max={to || undefined}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500">Hasta</label>
-              <input
-                type="date"
-                className="border rounded px-2 py-1"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                min={from || undefined}
-              />
-            </div>
-            {/* Si prefieres filtrar solo al click, deja este botón y elimina el effect de arriba */}
-            <button
-              className="px-3 py-1 rounded border"
-              onClick={load}
-              disabled={loading}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="font-serif text-2xl">Pedidos</h1>
+        <div className="flex items-end gap-2">
+          <div>
+            <label className="block text-xs text-muted mb-1">Estado</label>
+            <select
+              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm focus:border-accent"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
             >
-              Filtrar
+              <option value="">Todos</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">Desde</label>
+            <input
+              type="date"
+              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm focus:border-accent"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              max={to || undefined}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">Hasta</label>
+            <input
+              type="date"
+              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm focus:border-accent"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              min={from || undefined}
+            />
+          </div>
+          <button
+            className="px-3.5 py-1.5 rounded-md bg-accent text-accent-foreground text-sm font-medium hover:bg-accent-hover"
+            onClick={load}
+            disabled={loading}
+          >
+            Filtrar
+          </button>
+          {hasFilters && (
+            <button className="px-3.5 py-1.5 rounded-md border border-border text-sm hover:bg-surface" onClick={resetFilters}>
+              Limpiar
             </button>
-            {hasFilters && (
-              <button className="px-3 py-1 rounded border" onClick={resetFilters}>
-                Limpiar
-              </button>
-            )}
-          </div>
+          )}
         </div>
-
-        {loading ? (
-          <p>Cargando…</p>
-        ) : err ? (
-          <p className="text-red-600 text-sm">{err}</p>
-        ) : (
-          <div className="overflow-auto">
-            <table className="min-w-[1000px] w-full border">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="p-2 border text-left">ID</th>
-                  <th className="p-2 border text-left">Email</th>
-                  <th className="p-2 border text-left">Estado</th>
-                  <th className="p-2 border text-left">Total</th>
-                  <th className="p-2 border text-left">Fecha</th>
-                  <th className="p-2 border text-left">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((o) => (
-                  <tr key={o.id} className="border-t">
-                    <td className="p-2 border">{o.id}</td>
-                    <td className="p-2 border">{o.email ?? "—"}</td>
-                    <td className="p-2 border">
-                      <span className="inline-block rounded-full px-2 py-0.5 text-xs border">
-                        {o.status}
-                      </span>
-                    </td>
-                    <td className="p-2 border">{fmtMoney(o.total)}</td>
-                    <td className="p-2 border">
-                      {o.created_at
-                        ? new Date(o.created_at).toLocaleString()
-                        : "—"}
-                    </td>
-                    <td className="p-2 border">
-                      <div className="flex gap-2 items-center">
-                        <label className="text-xs text-gray-500">Cambiar a:</label>
-                        <select
-                          className="border rounded px-2 py-1"
-                          value=""
-                          disabled={updatingId === o.id}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v) updateStatus(o.id, v);
-                            e.currentTarget.value = ""; // resetea
-                          }}
-                        >
-                          <option value="">—</option>
-                          {STATUSES.filter((s) => s !== o.status).map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                        <Link href={`/admin/orders/${o.id}`} className="text-sm underline">
-                        Ver
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {items.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-4 text-center text-gray-500">
-                      No hay pedidos
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
-    </AdminGate>
+
+      {loading ? (
+        <p className="text-muted">Cargando…</p>
+      ) : err ? (
+        <p className="text-red-600 text-sm">{err}</p>
+      ) : (
+        <div className="overflow-auto rounded-lg border border-border bg-surface">
+          <table className="min-w-[1000px] w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted uppercase tracking-wide">
+                <th className="px-4 py-3 font-medium">ID</th>
+                <th className="px-4 py-3 font-medium">Email</th>
+                <th className="px-4 py-3 font-medium">Estado</th>
+                <th className="px-4 py-3 font-medium">Total</th>
+                <th className="px-4 py-3 font-medium">Fecha</th>
+                <th className="px-4 py-3 font-medium">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {items.map((o) => (
+                <tr key={o.id} className="hover:bg-background">
+                  <td className="px-4 py-3 text-muted">{o.id}</td>
+                  <td className="px-4 py-3">{o.email ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={o.status} />
+                  </td>
+                  <td className="px-4 py-3 font-medium">{fmtMoney(o.total)}</td>
+                  <td className="px-4 py-3 text-muted">
+                    {o.created_at
+                      ? new Date(o.created_at).toLocaleString()
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-3 items-center">
+                      <select
+                        className="rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-accent"
+                        value=""
+                        disabled={updatingId === o.id}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v) updateStatus(o.id, v);
+                          e.currentTarget.value = ""; // resetea
+                        }}
+                      >
+                        <option value="">Cambiar a…</option>
+                        {STATUSES.filter((s) => s !== o.status).map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <Link href={`/admin/orders/${o.id}`} className="text-accent hover:underline">
+                        Ver
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                    No hay pedidos
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import AdminGate from "@/components/AdminGate";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -123,39 +122,47 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <AdminGate>
-      <div className="p-6 space-y-4">
-        <h1 className="text-2xl font-bold">Usuarios</h1>
+    <div className="space-y-4">
+      <h1 className="font-serif text-2xl">Usuarios</h1>
 
-        {loading ? (
-          <p>Cargando…</p>
-        ) : err ? (
-          <p className="text-red-600 text-sm">{err}</p>
-        ) : (
-          <div className="overflow-auto">
-            <table className="min-w-[900px] w-full border">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="p-2 border text-left">ID</th>
-                  <th className="p-2 border text-left">Nombre</th>
-                  <th className="p-2 border text-left">Email</th>
-                  <th className="p-2 border text-left">Rol</th>
-                  <th className="p-2 border text-left">Acciones</th>
+      {loading ? (
+        <p className="text-muted">Cargando…</p>
+      ) : err ? (
+        <p className="text-red-600 text-sm">{err}</p>
+      ) : (
+        <>
+          <div className="overflow-auto rounded-lg border border-border bg-surface">
+            <table className="min-w-[900px] w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted uppercase tracking-wide">
+                  <th className="px-4 py-3 font-medium">ID</th>
+                  <th className="px-4 py-3 font-medium">Nombre</th>
+                  <th className="px-4 py-3 font-medium">Email</th>
+                  <th className="px-4 py-3 font-medium">Rol</th>
+                  <th className="px-4 py-3 font-medium">Acciones</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {items.map((u) => (
-                  <tr key={u.id} className="border-t">
-                    <td className="p-2 border">{u.id}</td>
-                    <td className="p-2 border">{u.name || "—"}</td>
-                    <td className="p-2 border">{u.email}</td>
-                    <td className="p-2 border">{u.role}</td>
-                    <td className="p-2 border">
-                      <div className="flex gap-3">
+                  <tr key={u.id} className="hover:bg-background">
+                    <td className="px-4 py-3 text-muted">{u.id}</td>
+                    <td className="px-4 py-3 font-medium">{u.name || "—"}</td>
+                    <td className="px-4 py-3">{u.email}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          u.role === "admin" ? "bg-accent/10 text-accent" : "bg-muted/15 text-muted"
+                        }`}
+                      >
+                        {u.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-4">
                         <button
                           onClick={() => toggleRole(u)}
                           disabled={updatingId === u.id}
-                          className="underline text-sm disabled:opacity-60"
+                          className="text-accent hover:underline disabled:opacity-50"
                         >
                           {updatingId === u.id
                             ? "Actualizando…"
@@ -166,7 +173,7 @@ export default function AdminUsersPage() {
                         <button
                           onClick={() => deleteUser(u)}
                           disabled={deletingId === u.id}
-                          className="underline text-sm text-red-600 disabled:opacity-60"
+                          className="text-red-600 hover:underline disabled:opacity-50"
                         >
                           {deletingId === u.id ? "Eliminando…" : "Eliminar"}
                         </button>
@@ -176,34 +183,34 @@ export default function AdminUsersPage() {
                 ))}
                 {items.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-4 text-center text-gray-500">
+                    <td colSpan={5} className="px-4 py-8 text-center text-muted">
                       Sin usuarios
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
-
-            {/* paginación simple */}
-            <div className="flex items-center gap-2 mt-3">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1 border rounded text-sm"
-                disabled={page === 1}
-              >
-                ← Anterior
-              </button>
-              <span className="text-sm">Página {page}</span>
-              <button
-                onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1 border rounded text-sm"
-              >
-                Siguiente →
-              </button>
-            </div>
           </div>
-        )}
-      </div>
-    </AdminGate>
+
+          {/* paginación simple */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3.5 py-1.5 rounded-md border border-border text-sm hover:bg-surface disabled:opacity-40"
+              disabled={page === 1}
+            >
+              ← Anterior
+            </button>
+            <span className="text-sm text-muted">Página {page}</span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              className="px-3.5 py-1.5 rounded-md border border-border text-sm hover:bg-surface"
+            >
+              Siguiente →
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import AdminGate from "@/components/AdminGate";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -93,41 +92,34 @@ export default function AdminDashboardPage() {
   }, []);
 
   return (
-    <AdminGate>
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <div className="flex gap-2">
-            <Link href="/admin/products" className="px-3 py-1 rounded border">Ver productos</Link>
-            <Link href="/admin/users" className="px-3 py-1 rounded border">Ver usuarios</Link>
-            <Link href="/admin/orders" className="px-3 py-1 rounded border">Ver pedidos</Link>
-            <Link href="/admin/categories" className="px-3 py-1 rounded border">Ver categorías</Link>
-          </div>
-        </div>
+    <div className="space-y-8">
+      <h1 className="font-serif text-2xl">Dashboard</h1>
 
-        {err && <p className="text-red-600 text-sm">{err}</p>}
+      {err && <p className="text-red-600 text-sm">{err}</p>}
 
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <Card title="Productos" value={stats.products} href="/admin/products" />
-          <Card title="Usuarios" value={stats.users} href="/admin/users" />
-          <Card title="Pedidos" value={stats.orders} href="/admin/orders" />
-          <Card title="Categorías" value={null} href="/admin/categories" />
-          <Card title="Ingresos" value={stats.revenue} href="/admin/orders" format="money" />
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <Card title="Productos" value={stats.products} href="/admin/products" />
+        <Card title="Usuarios" value={stats.users} href="/admin/users" />
+        <Card title="Pedidos" value={stats.orders} href="/admin/orders" />
+        <Card title="Categorías" value={null} href="/admin/categories" />
+        <Card title="Ingresos" value={stats.revenue} href="/admin/orders" format="money" accent />
+      </div>
 
-        {/* Opcional: resumen por estado */}
-        {stats.ordersByStatus && stats.ordersByStatus.length > 0 && (
+      {/* Opcional: resumen por estado */}
+      {stats.ordersByStatus && stats.ordersByStatus.length > 0 && (
+        <div>
+          <h2 className="text-sm text-muted mb-3">Pedidos por estado</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {stats.ordersByStatus.map((s) => (
-              <div key={s.status} className="rounded-lg border p-3">
-                <div className="text-xs text-gray-500 uppercase">{s.status}</div>
-                <div className="text-xl font-semibold">{s.count}</div>
+              <div key={s.status} className="rounded-lg border border-border bg-surface p-4">
+                <div className="text-xs text-muted uppercase tracking-wide">{s.status}</div>
+                <div className="text-2xl font-serif mt-1">{s.count}</div>
               </div>
             ))}
           </div>
-        )}
-      </div>
-    </AdminGate>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -136,11 +128,13 @@ function Card({
   value,
   href,
   format,
+  accent,
 }: {
   title: string;
   value: number | null;
   href: string;
   format?: "money";
+  accent?: boolean;
 }) {
   const display =
     value == null
@@ -150,10 +144,13 @@ function Card({
       : String(value);
 
   return (
-    <Link href={href} className="block rounded-xl border p-4 hover:shadow-sm transition">
-      <div className="text-sm text-gray-500">{title}</div>
-      <div className="text-3xl font-semibold mt-1">{display}</div>
-      <div className="text-xs text-gray-400 mt-2 underline">Ir a {title.toLowerCase()}</div>
+    <Link
+      href={href}
+      className="block rounded-lg border border-border bg-surface p-4 hover:border-accent/40 hover:-translate-y-0.5 transition-all"
+    >
+      <div className="text-sm text-muted">{title}</div>
+      <div className={`text-3xl font-serif mt-1 ${accent ? "text-accent" : ""}`}>{display}</div>
+      <div className="text-xs text-muted mt-2">Ir a {title.toLowerCase()} →</div>
     </Link>
   );
 }

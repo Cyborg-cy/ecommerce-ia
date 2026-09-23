@@ -1,6 +1,5 @@
 "use client";
 
-import AdminGate from "@/components/AdminGate";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -196,168 +195,164 @@ export default function AdminEditProductPage() {
   }
 
   if (loading) {
-    return (
-      <AdminGate>
-        <div className="p-6">Cargando…</div>
-      </AdminGate>
-    );
+    return <div className="text-muted">Cargando…</div>;
   }
 
   return (
-    <AdminGate>
-      <div className="p-6 max-w-2xl">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Editar producto #{pid}</h1>
-          <Link href="/admin/products" className="underline text-sm">
-            ← Volver
-          </Link>
+    <div className="max-w-2xl">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="font-serif text-2xl">Editar producto #{pid}</h1>
+        <Link href="/admin/products" className="text-sm text-muted hover:text-foreground transition-colors">
+          ← Volver
+        </Link>
+      </div>
+
+      <form onSubmit={save} className="space-y-5">
+        <div>
+          <label className="block text-sm mb-1.5 text-foreground/80">Nombre</label>
+          <input
+            className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+            value={f.name ?? ""}
+            onChange={(e) => onChange("name", e.target.value)}
+            required
+            autoComplete="off"
+          />
         </div>
 
-        <form onSubmit={save} className="space-y-4 mt-4">
+        <div>
+          <label className="block text-sm mb-1.5 text-foreground/80">Descripción (opcional)</label>
+          <textarea
+            className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+            value={f.description ?? ""}
+            onChange={(e) => onChange("description", e.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm">Nombre</label>
+            <label className="block text-sm mb-1.5 text-foreground/80">Precio</label>
             <input
-              className="border rounded px-3 py-2 w-full"
-              value={f.name ?? ""}
-              onChange={(e) => onChange("name", e.target.value)}
-              required
-              autoComplete="off"
+              inputMode="decimal"
+              className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+              value={f.price ?? ""}
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^\d.]/g, "");
+                onChange("price", v);
+              }}
+              placeholder="0.00"
             />
           </div>
-
           <div>
-            <label className="block text-sm">Descripción (opcional)</label>
-            <textarea
-              className="border rounded px-3 py-2 w-full"
-              value={f.description ?? ""}
-              onChange={(e) => onChange("description", e.target.value)}
+            <label className="block text-sm mb-1.5 text-foreground/80">Stock</label>
+            <input
+              inputMode="numeric"
+              className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+              value={f.stock ?? ""}
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^\d]/g, "");
+                onChange("stock", v);
+              }}
+              placeholder="0"
             />
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm">Precio</label>
-              <input
-                inputMode="decimal"
-                className="border rounded px-3 py-2 w-full"
-                value={f.price ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^\d.]/g, "");
-                  onChange("price", v);
-                }}
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <label className="block text-sm">Stock</label>
-              <input
-                inputMode="numeric"
-                className="border rounded px-3 py-2 w-full"
-                value={f.stock ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^\d]/g, "");
-                  onChange("stock", v);
-                }}
-                placeholder="0"
-              />
-            </div>
-          </div>
+        <div>
+          <label className="block text-sm mb-1.5 text-foreground/80">Categoría (opcional)</label>
+          <select
+            className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+            value={f.category_id ?? ""}
+            onChange={(e) => onChange("category_id", e.target.value)}
+            disabled={loadingCats}
+          >
+            <option value="">Sin categoría</option>
+            {cats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} (#{c.id})
+              </option>
+            ))}
+          </select>
+        </div>
 
+        {/* Modo imagen */}
+        <div className="flex gap-5 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={mode === "url"}
+              onChange={() => setMode("url")}
+              className="accent-accent"
+            />
+            Desde URL
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={mode === "file"}
+              onChange={() => setMode("file")}
+              className="accent-accent"
+            />
+            Subir archivo
+          </label>
+        </div>
+
+        {mode === "url" ? (
           <div>
-            <label className="block text-sm">Categoría (opcional)</label>
-            <select
-              className="border rounded px-3 py-2 w-full"
-              value={f.category_id ?? ""}
-              onChange={(e) => onChange("category_id", e.target.value)}
-              disabled={loadingCats}
-            >
-              <option value="">Sin categoría</option>
-              {cats.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} (#{c.id})
-                </option>
-              ))}
-            </select>
+            <label className="block text-sm mb-1.5 text-foreground/80">URL de imagen (opcional)</label>
+            <input
+              type="url"
+              className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
+              placeholder="https://…"
+              value={f.image_url ?? ""}
+              onChange={(e) => setF({ ...f, image_url: e.target.value })}
+            />
           </div>
-
-          {/* Modo imagen */}
-          <div className="flex gap-4 text-sm">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={mode === "url"}
-                onChange={() => setMode("url")}
-              />
-              Desde URL
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={mode === "file"}
-                onChange={() => setMode("file")}
-              />
-              Subir archivo
-            </label>
-          </div>
-
-          {mode === "url" ? (
-            <div>
-              <label className="block text-sm">URL de imagen (opcional)</label>
-              <input
-                type="url"
-                className="border rounded px-3 py-2 w-full"
-                placeholder="https://…"
-                value={f.image_url ?? ""}
-                onChange={(e) => setF({ ...f, image_url: e.target.value })}
-              />
-            </div>
-          ) : (
-            <div>
-              <label className="block text-sm">Archivo</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="block"
-              />
-              {file && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {file.name} ({Math.round((file.size / 1024 / 1024) * 100) / 100} MB)
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Preview */}
-          <div className="mt-2 w-28 h-28 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-            {mode === "file" && file ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={URL.createObjectURL(file)}
-                alt="preview"
-                className="w-full h-full object-cover"
-              />
-            ) : f.image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={f.image_url}
-                alt="preview"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-xs text-gray-400">Sin imagen</span>
+        ) : (
+          <div>
+            <label className="block text-sm mb-1.5 text-foreground/80">Archivo</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="block text-sm"
+            />
+            {file && (
+              <p className="text-xs text-muted mt-1">
+                {file.name} ({Math.round((file.size / 1024 / 1024) * 100) / 100} MB)
+              </p>
             )}
           </div>
+        )}
 
-          <button
-            type="submit"
-            disabled={saving || uploading}
-            className="bg-black text-white rounded px-4 py-2 disabled:opacity-60"
-          >
-            {uploading ? "Subiendo…" : saving ? "Guardando…" : "Guardar"}
-          </button>
-        </form>
-      </div>
-    </AdminGate>
+        {/* Preview */}
+        <div className="w-28 h-28 rounded-md border border-border bg-background overflow-hidden flex items-center justify-center">
+          {mode === "file" && file ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={URL.createObjectURL(file)}
+              alt="preview"
+              className="w-full h-full object-cover"
+            />
+          ) : f.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={f.image_url}
+              alt="preview"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-xs text-muted">Sin imagen</span>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={saving || uploading}
+          className="rounded-md px-5 py-2.5 bg-accent text-accent-foreground text-sm font-medium hover:bg-accent-hover disabled:opacity-50"
+        >
+          {uploading ? "Subiendo…" : saving ? "Guardando…" : "Guardar"}
+        </button>
+      </form>
+    </div>
   );
 }

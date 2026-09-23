@@ -1,6 +1,5 @@
 "use client";
 
-import AdminGate from "@/components/AdminGate";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -141,103 +140,101 @@ export default function AdminCategoriesPage() {
   }
 
   return (
-    <AdminGate>
-      <div className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Categorías</h1>
-          <Link href="/admin/categories/new" className="px-3 py-1 rounded bg-black text-white text-sm">
-            Nueva
-          </Link>
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="font-serif text-2xl">Categorías</h1>
+        <Link href="/admin/categories/new" className="px-3.5 py-1.5 rounded-md bg-accent text-accent-foreground text-sm font-medium hover:bg-accent-hover">
+          Nueva
+        </Link>
+      </div>
 
-        {loading ? (
-          <p>Cargando…</p>
-        ) : err ? (
-          <p className="text-red-600 text-sm">{err}</p>
-        ) : (
-          <div className="overflow-auto">
-            <table className="min-w-[700px] w-full border">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="p-2 border text-left">ID</th>
-                  <th className="p-2 border text-left">Nombre</th>
-                  <th className="p-2 border text-left">Descripción</th>
-                  <th className="p-2 border text-left">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((c) => {
-                  const isEditing = editingId === c.id;
-                  return (
-                    <tr key={c.id} className="border-t">
-                      <td className="p-2 border">{c.id}</td>
-                      <td className="p-2 border">
-                        {isEditing ? (
-                          <input
-                            className="border rounded px-2 py-1 w-full"
-                            value={form.name}
-                            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                            autoFocus
-                          />
-                        ) : (
-                          c.name
-                        )}
-                      </td>
-                      <td className="p-2 border">
-                        {isEditing ? (
-                          <input
-                            className="border rounded px-2 py-1 w-full"
-                            value={form.description}
-                            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                          />
-                        ) : (
-                          c.description ?? "—"
-                        )}
-                      </td>
-                      <td className="p-2 border">
-                        {isEditing ? (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => saveEdit(c.id)}
-                              disabled={saving}
-                              className="px-3 py-1 rounded bg-black text-white text-sm disabled:opacity-60"
-                            >
-                              {saving ? "Guardando…" : "Guardar"}
-                            </button>
-                            <button onClick={cancelEdit} className="px-3 py-1 rounded border text-sm">
-                              Cancelar
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-3">
-                            <button onClick={() => startEdit(c)} className="underline text-sm">
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => delCategory(c.id)}
-                              disabled={deletingId === c.id}
-                              className="underline text-sm text-red-600 disabled:opacity-60"
-                            >
-                              {deletingId === c.id ? "Eliminando…" : "Eliminar"}
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {items.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="p-4 text-center text-gray-500">
-                      Sin categorías
+      {loading ? (
+        <p className="text-muted">Cargando…</p>
+      ) : err ? (
+        <p className="text-red-600 text-sm">{err}</p>
+      ) : (
+        <div className="overflow-auto rounded-lg border border-border bg-surface">
+          <table className="min-w-[700px] w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted uppercase tracking-wide">
+                <th className="px-4 py-3 font-medium">ID</th>
+                <th className="px-4 py-3 font-medium">Nombre</th>
+                <th className="px-4 py-3 font-medium">Descripción</th>
+                <th className="px-4 py-3 font-medium">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {items.map((c) => {
+                const isEditing = editingId === c.id;
+                return (
+                  <tr key={c.id} className="hover:bg-background">
+                    <td className="px-4 py-3 text-muted">{c.id}</td>
+                    <td className="px-4 py-3">
+                      {isEditing ? (
+                        <input
+                          className="rounded-md border border-border bg-surface px-2.5 py-1.5 w-full focus:border-accent"
+                          value={form.name}
+                          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="font-medium">{c.name}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isEditing ? (
+                        <input
+                          className="rounded-md border border-border bg-surface px-2.5 py-1.5 w-full focus:border-accent"
+                          value={form.description}
+                          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                        />
+                      ) : (
+                        <span className="text-muted">{c.description ?? "—"}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isEditing ? (
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => saveEdit(c.id)}
+                            disabled={saving}
+                            className="px-3 py-1.5 rounded-md bg-accent text-accent-foreground text-sm disabled:opacity-50"
+                          >
+                            {saving ? "Guardando…" : "Guardar"}
+                          </button>
+                          <button onClick={cancelEdit} className="px-3 py-1.5 rounded-md border border-border text-sm hover:bg-background">
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-4">
+                          <button onClick={() => startEdit(c)} className="text-accent hover:underline">
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => delCategory(c.id)}
+                            disabled={deletingId === c.id}
+                            className="text-red-600 hover:underline disabled:opacity-50"
+                          >
+                            {deletingId === c.id ? "Eliminando…" : "Eliminar"}
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </AdminGate>
+                );
+              })}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-muted">
+                    Sin categorías
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
