@@ -47,8 +47,12 @@ const allowOrigin = (origin) => {
     // match exacto por origin completo (incluye protocolo y host)
     if (whitelist.includes(origin)) return true;
 
-    // previews de vercel (cualquier subdominio)
-    if (hostname.endsWith(".vercel.app")) return true;
+    // previews de Vercel — solo los deployments de este proyecto
+    // (nombre del proyecto en Vercel + "-" + hash/organización), no
+    // cualquier sitio *.vercel.app del mundo.
+    if (hostname.endsWith(".vercel.app") && /^ecommerce-(frontend|ia)-/.test(hostname)) {
+      return true;
+    }
 
     return false;
   } catch {
@@ -128,12 +132,17 @@ app.use((req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });
 });
 
-// Manejador de errores global
+// Manejador de errores global.
+// Solo se devuelve err.message al cliente cuando es un error "esperado"
+// (status < 500, como los que lanzan las rutas a propósito). Para un
+// 500 real (bug, fallo de Postgres, etc.) se manda un mensaje genérico
+// y el detalle completo se queda solo en el log del servidor — antes
+// se filtraban mensajes internos de Postgres tal cual al cliente.
 app.use((err, _req, res, _next) => {
   console.error("❌ Unhandled:", err);
-  res
-    .status(err.status || 500)
-    .json({ error: err.message || "Error inesperado" });
+  const status = err.status || 500;
+  const message = status < 500 ? err.message || "Error inesperado" : "Error interno del servidor";
+  res.status(status).json({ error: message });
 });
 
 const PORT = process.env.PORT || 3000;

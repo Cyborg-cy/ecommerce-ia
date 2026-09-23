@@ -3,18 +3,11 @@ console.log("ADMIN ROUTER CARGADO");
 
 
 import express from "express";
-import Stripe from "stripe";
 import pool from "../db.js";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
+import { transitionOrderStatus, OrderTransitionError } from "../services/orderStatus.js";
 
 const router = express.Router();
-
-let stripe;
-try {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-06-20" });
-} catch (e) {
-  console.error("❌ Stripe init error (admin.js):", e?.message || e);
-}
 
 
 // ===== USUARIOS =====
@@ -98,6 +91,15 @@ router.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
     [role, id]
   );
   if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+
+  // El access token vigente sigue teniendo el rol viejo hasta que expira
+  // (hasta JWT_EXPIRES). Revocar sus refresh tokens evita que, además,
+  // pueda renovar la sesión indefinidamente con el rol que ya no tiene.
+  await pool.query(
+    "UPDATE refresh_tokens SET revoked_at=NOW() WHERE user_id=$1 AND revoked_at IS NULL",
+    [id]
+  );
+
   res.json(rows[0]);
 });
 
@@ -160,7 +162,11 @@ router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
     JOIN users u ON u.id = o.user_id
     ${where.length ? "WHERE " + where.join(" AND ") : ""}
     ORDER BY o.created_at DESC
+    LIMIT 500
   `;
+  // Nota: 500 es un límite de seguridad, no paginación real — con más
+  // volumen de pedidos esto necesita page/pageSize como ya tiene
+  // GET /admin/users.
   const { rows } = await pool.query(sql, params);
   res.json(rows);
 });
@@ -175,7 +181,7 @@ router.get("/orders/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const { rows: oh } = await pool.query(
       `SELECT
-         o.id, o.user_id, o.status,
+         o.id, o.user_id, o.status, o.payment_status,
          o.total::numeric::float8 AS total,
          o.created_at, o.updated_at,
          u.email,
@@ -211,81 +217,23 @@ router.get("/orders/:id", verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // PUT /admin/orders/:id/status  { status }
-// Cancelar una orden que ya está paga reembolsa de verdad en Stripe y
-// repone el stock — antes esto solo cambiaba la etiqueta y dejaba al
-// cliente cobrado sin que nadie se enterara.
+// La máquina de transiciones y el reembolso real (si corresponde) viven
+// en services/orderStatus.js — mismo servicio que usa PUT /orders/:id,
+// para que no existan dos rutas con reglas distintas.
 router.put("/orders/:id/status", verifyToken, verifyAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status } = req.body || {};
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID inválido" });
-  if (!["pending", "paid", "shipped", "cancelled"].includes(status)) {
-    return res.status(400).json({ error: "Estado inválido" });
-  }
 
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-
-    const { rows: current } = await client.query(
-      "SELECT status, payment_status, stripe_payment_intent_id FROM orders WHERE id=$1 FOR UPDATE",
-      [id]
-    );
-    if (!current.length) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Pedido no encontrado" });
-    }
-    const order = current[0];
-    let newPaymentStatus = order.payment_status;
-
-    const cancellingAPaidOrder = status === "cancelled" && order.payment_status === "paid";
-
-    if (cancellingAPaidOrder) {
-      if (!order.stripe_payment_intent_id) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({
-          error: "La orden está pagada pero no tiene un payment_intent para reembolsar.",
-        });
-      }
-      if (!stripe) {
-        await client.query("ROLLBACK");
-        return res.status(500).json({ error: "Stripe no inicializado" });
-      }
-      try {
-        await stripe.refunds.create({ payment_intent: order.stripe_payment_intent_id });
-      } catch (stripeErr) {
-        await client.query("ROLLBACK");
-        console.error("❌ Error reembolsando en Stripe:", stripeErr?.message || stripeErr);
-        return res.status(502).json({ error: "No se pudo procesar el reembolso en Stripe" });
-      }
-
-      // Repone el stock de esta orden (se había descontado al pagar)
-      const { rows: items } = await client.query(
-        "SELECT product_id, quantity FROM order_items WHERE order_id=$1",
-        [id]
-      );
-      for (const it of items) {
-        await client.query(
-          "UPDATE products SET stock = stock + $1 WHERE id = $2",
-          [it.quantity, it.product_id]
-        );
-      }
-      newPaymentStatus = "refunded";
-    }
-
-    const { rows } = await client.query(
-      `UPDATE orders SET status=$1, payment_status=$2 WHERE id=$3
-       RETURNING id, user_id, status, payment_status, total::numeric::float8 AS total, created_at`,
-      [status, newPaymentStatus, id]
-    );
-
-    await client.query("COMMIT");
-    res.json(rows[0]);
+    const updated = await transitionOrderStatus({ orderId: id, newStatus: status, actorIsAdmin: true });
+    res.json(updated);
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (err instanceof OrderTransitionError) {
+      return res.status(err.status).json({ error: err.message });
+    }
     console.error("PUT /admin/orders/:id/status", err);
     res.status(500).json({ error: "No se pudo actualizar el estado" });
-  } finally {
-    client.release();
   }
 });
 
@@ -298,7 +246,10 @@ router.get("/stats", verifyToken, verifyAdmin, async (_req, res) => {
         pool.query("SELECT COUNT(*)::int AS total_users FROM users"),
         pool.query("SELECT COUNT(*)::int AS total_products FROM products"),
         pool.query("SELECT COUNT(*)::int AS total_orders FROM orders"),
-        pool.query("SELECT COALESCE(SUM(total)::numeric::float8, 0) AS revenue_paid FROM orders WHERE status='paid'"),
+        // payment_status, no status: un pedido "shipped" ya no tiene
+        // status='paid' pero el dinero sigue cobrado, así que debe seguir
+        // contando como ingreso. payment_status='refunded' sí se excluye.
+        pool.query("SELECT COALESCE(SUM(total)::numeric::float8, 0) AS revenue_paid FROM orders WHERE payment_status='paid'"),
         pool.query(`
           SELECT status, COUNT(*)::int AS count
           FROM orders

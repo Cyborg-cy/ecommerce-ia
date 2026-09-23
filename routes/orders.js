@@ -4,6 +4,7 @@ import pool from "../db.js";
 import { validate } from "../middleware/validate.js";
 import { updateOrderStatusSchema } from "../schemas/orderSchemas.js";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
+import { transitionOrderStatus, OrderTransitionError } from "../services/orderStatus.js";
 
 
 const router = express.Router();
@@ -118,60 +119,35 @@ router.get("/:id", verifyToken, async (req, res) => {
 
 /**
  * PUT /orders/:id
- * Cambiar estado.
- * - Dueño: solo puede cambiar a "cancelled" si está "pending"
- * - Admin: puede poner cualquier estado: pending|paid|shipped|cancelled
+ * Cambiar estado. La máquina de transiciones y el reembolso real (si
+ * corresponde) viven en services/orderStatus.js — es el mismo servicio
+ * que usa /admin/orders/:id/status, así que no hay dos caminos con
+ * reglas distintas.
+ * - Dueño: solo puede cancelar su propia orden mientras esté "pending"
+ * - Admin: cualquier transición válida (ver services/orderStatus.js)
  */
 router.put("/:id", verifyToken, validate(updateOrderStatusSchema), async (req, res) => {
   const orderId = Number(req.params.id);
   const { status } = req.body;
-  const ALLOWED = ["pending", "paid", "shipped", "cancelled"];
 
-  if (!status || !ALLOWED.includes(status)) {
-    return res.status(400).json({ error: "Estado inválido" });
-  }
-
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    const { exists, allowed } = await assertOwnerOrAdmin(pool, orderId, req.user);
+    if (!exists) return res.status(404).json({ error: "Pedido no encontrado" });
+    if (!allowed) return res.status(403).json({ error: "No tienes permisos sobre este pedido" });
 
-    const { exists, allowed } = await assertOwnerOrAdmin(client, orderId, req.user);
-    if (!exists) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Pedido no encontrado" });
+    const isAdmin = req.user.role === "admin";
+    if (!isAdmin && status !== "cancelled") {
+      return res.status(403).json({ error: "Solo admin puede cambiar a ese estado" });
     }
 
-    if (req.user.role === "admin") {
-      // Admin: libre
-    } else {
-      // Dueño: solo puede cancelar si está pending
-      if (status !== "cancelled") {
-        await client.query("ROLLBACK");
-        return res.status(403).json({ error: "Solo admin puede cambiar a ese estado" });
-      }
-      const { rows } = await client.query(
-        "SELECT status FROM orders WHERE id = $1",
-        [orderId]
-      );
-      if (rows[0].status !== "pending") {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: "Solo se puede cancelar una orden en estado pending" });
-      }
-    }
-
-    const { rows: upd } = await client.query(
-      "UPDATE orders SET status=$1 WHERE id=$2 RETURNING id, user_id, total, status, payment_status, created_at",
-      [status, orderId]
-    );
-
-    await client.query("COMMIT");
-    res.json(upd[0]);
+    const updated = await transitionOrderStatus({ orderId, newStatus: status, actorIsAdmin: isAdmin });
+    res.json(updated);
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (err instanceof OrderTransitionError) {
+      return res.status(err.status).json({ error: err.message });
+    }
     console.error("❌ PUT /orders/:id:", err);
     res.status(500).json({ error: "Error al actualizar pedido" });
-  } finally {
-    client.release();
   }
 });
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { decodeJWTPayload } from "@/lib/jwt";
+import { decodeJWTPayload, isTokenExpired } from "@/lib/jwt";
 
 function isAdminFromPayload(p: any): boolean {
   if (!p || typeof p !== "object") return false;
@@ -24,6 +24,12 @@ export default function AdminGate({ children }: { children: React.ReactNode }) {
     const next = encodeURIComponent(pathname || "/admin");
     if (!token) {
       r.replace(`/login?next=${next}`);
+      return;
+    }
+    if (isTokenExpired(token)) {
+      // Antes esto dejaba pasar igual (solo miraba el role del payload,
+      // nunca exp) y el panel se rompía en el primer fetch con un 401.
+      r.replace(`/login?next=${next}&expired=1`);
       return;
     }
     const payload = decodeJWTPayload(token);
