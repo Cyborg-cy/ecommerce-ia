@@ -34,70 +34,45 @@ router.post(
       if (event.type === "payment_intent.succeeded") {
         const pi = event.data.object;
 
-        // metadata.user_id lo pusimos al crear el intent
-        const userId = Number(pi.metadata?.user_id);
-        if (!userId) {
-          console.warn("⚠️ payment_intent.succeeded SIN user_id en metadata");
+        // order_id lo pusimos en la metadata al crear el intent, cuando la
+        // orden (con sus items, foto fija del carrito de ese momento) ya
+        // había sido creada como pending/unpaid. Aquí solo la confirmamos.
+        const orderId = Number(pi.metadata?.order_id);
+        if (!orderId) {
+          console.warn("⚠️ payment_intent.succeeded SIN order_id en metadata:", pi.id);
           return res.status(200).send("ok");
         }
 
-        // Cálculo del total (puedes confiar en pi.amount, que viene en centavos)
-        const total = Number(pi.amount) / 100;
-
-        // Creamos la orden + items y limpiamos carrito en transacción
         const client = await pool.connect();
         try {
           await client.query("BEGIN");
 
-          // Idempotencia: si Stripe reintenta el evento, no duplicar la orden
-          const already = await client.query(
-            "SELECT id FROM orders WHERE stripe_payment_intent_id=$1",
-            [pi.id]
+          const { rows: orderRows } = await client.query(
+            "SELECT id, payment_status FROM orders WHERE id=$1 FOR UPDATE",
+            [orderId]
           );
-          if (already.rows.length) {
-            console.log(`↩️ Evento ya procesado para intent ${pi.id}, se ignora`);
+          if (!orderRows.length) {
+            console.warn(`⚠️ Orden ${orderId} no encontrada para intent ${pi.id}`);
             await client.query("COMMIT");
             return res.status(200).send("ok");
           }
 
-          // Obtener carrito e items
-          const cart = await client.query(
-            "SELECT id FROM carts WHERE user_id=$1",
-            [userId]
-          );
-          if (!cart.rows.length) {
-            console.warn("⚠️ Usuario sin carrito al pagar:", userId);
+          // Idempotencia: si Stripe reintenta el evento, no volver a
+          // descontar stock ni reprocesar una orden ya confirmada.
+          if (orderRows[0].payment_status === "paid") {
+            console.log(`↩️ Orden ${orderId} ya estaba paga, se ignora el reintento`);
             await client.query("COMMIT");
             return res.status(200).send("ok");
           }
-          const cartId = cart.rows[0].id;
 
-          const items = await client.query(
-            `SELECT ci.product_id, ci.quantity, ci.price_at_add AS price
-             FROM cart_items ci
-             WHERE ci.cart_id = $1
-             ORDER BY ci.id ASC`,
-            [cartId]
+          const { rows: items } = await client.query(
+            "SELECT product_id, quantity FROM order_items WHERE order_id=$1",
+            [orderId]
           );
 
-          // Crear orden
-          const orderRes = await client.query(
-            `INSERT INTO orders (user_id, total, status, payment_status, stripe_payment_intent_id)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING id, user_id, total, status, payment_status, created_at`,
-            [userId, total, "paid", "paid", pi.id]
-          );
-
-          // Insertar items y descontar stock
           // Bloqueamos la fila del producto (FOR UPDATE) para que dos pagos
           // concurrentes del mismo producto no lean el mismo stock a la vez.
-          for (const it of items.rows) {
-            await client.query(
-              `INSERT INTO order_items (order_id, product_id, quantity, price)
-               VALUES ($1, $2, $3, $4)`,
-              [orderRes.rows[0].id, it.product_id, it.quantity, it.price]
-            );
-
+          for (const it of items) {
             const { rows: locked } = await client.query(
               `SELECT stock FROM products WHERE id = $1 FOR UPDATE`,
               [it.product_id]
@@ -107,7 +82,7 @@ router.post(
               // El pago ya se cobró en Stripe y no se puede deshacer aquí;
               // dejamos el stock en 0 y avisamos para que se resuelva a mano.
               console.warn(
-                `⚠️ Sobreventa: producto ${it.product_id} tenía ${currentStock} y se vendieron ${it.quantity} (orden ${orderRes.rows[0].id})`
+                `⚠️ Sobreventa: producto ${it.product_id} tenía ${currentStock} y se vendieron ${it.quantity} (orden ${orderId})`
               );
             }
             await client.query(
@@ -116,22 +91,22 @@ router.post(
             );
           }
 
-          // Limpiar carrito
-          await client.query("DELETE FROM cart_items WHERE cart_id=$1", [cartId]);
+          await client.query(
+            "UPDATE orders SET status='paid', payment_status='paid', stripe_payment_intent_id=$1 WHERE id=$2",
+            [pi.id, orderId]
+          );
 
           await client.query("COMMIT");
-          console.log(
-            `✅ Orden creada por webhook: ${orderRes.rows[0].id} intent: ${pi.id}`
-          );
+          console.log(`✅ Orden ${orderId} confirmada por webhook, intent: ${pi.id}`);
         } catch (e) {
           await client.query("ROLLBACK");
-          console.error("❌ Error webhook creando orden:", e);
+          console.error("❌ Error webhook confirmando orden:", e);
+          return res.status(500).send("error confirmando la orden, reintentar");
         } finally {
           client.release();
         }
       }
 
-      // Responder OK SIEMPRE que procesemos el evento
       res.status(200).send("ok");
     } catch (e) {
       console.error("❌ Webhook handler error:", e);

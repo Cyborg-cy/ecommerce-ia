@@ -45,6 +45,13 @@ async function main() {
   const reg = await req("POST", "/users/register", { body: { name: "Smoke Test", email, password } });
   reg.status === 201 ? ok("registro de usuario") : fail("registro de usuario", `HTTP ${reg.status}`);
 
+  const escalation = await req("POST", "/users/register", {
+    body: { name: "Attacker", email: `smoke-admin-${Date.now()}@test.com`, password, role: "admin" },
+  });
+  escalation.data?.role === "user"
+    ? ok("registro público ignora role:\"admin\" (no hay escalada de privilegios)")
+    : fail("¡registro público permite crear cuentas admin!", `role devuelto: ${escalation.data?.role}`);
+
   const login = await req("POST", "/auth/login", { body: { email, password } });
   const hasTokens = login.status === 200 && login.data?.accessToken && login.data?.refreshToken;
   hasTokens ? ok("login devuelve accessToken + refreshToken") : fail("login", `HTTP ${login.status}`);
@@ -75,6 +82,14 @@ async function main() {
   list.status === 200 && Array.isArray(list.data?.items)
     ? ok("GET /products lista productos")
     : fail("GET /products", `HTTP ${list.status}`);
+
+  const firstProductId = list.data?.items?.[0]?.id;
+  if (firstProductId) {
+    const recs = await req("GET", `/products/recommendations/${firstProductId}`);
+    recs.status === 200
+      ? ok("GET /products/recommendations/:id no revienta")
+      : fail("GET /products/recommendations/:id", `HTTP ${recs.status}`);
+  }
 
   const search = await req("GET", "/products/search?q=a");
   search.status === 200

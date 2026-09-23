@@ -17,66 +17,108 @@ try {
 
 /**
  * POST /payments/create-intent
- * - Suma carrito y crea PaymentIntent real
+ * - Toma el carrito, lo convierte en una orden pending/unpaid con sus
+ *   items (foto fija, ya no se puede alterar por cambios posteriores en
+ *   el carrito) y crea el PaymentIntent para exactamente esa orden.
+ * - El carrito se vacía aquí mismo: lo que se cobra queda reservado en
+ *   la orden, no se puede pagar dos veces ni cobrar algo distinto a lo
+ *   que finalmente se entrega.
  */
 router.post("/create-intent", verifyToken, async (req, res) => {
-  try {
-    if (!stripe) {
-      return res.status(500).json({ error: "Stripe no inicializado" });
-    }
+  if (!stripe) {
+    return res.status(500).json({ error: "Stripe no inicializado" });
+  }
 
-    const { rows } = await pool.query(
-      `SELECT ci.quantity, ci.price_at_add AS price
-       FROM carts c
-       JOIN cart_items ci ON ci.cart_id = c.id
-       WHERE c.user_id = $1`,
-      [req.user.id]
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const cart = await client.query("SELECT id FROM carts WHERE user_id=$1", [req.user.id]);
+    if (!cart.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "El carrito está vacío" });
+    }
+    const cartId = cart.rows[0].id;
+
+    const { rows } = await client.query(
+      `SELECT ci.product_id, ci.quantity, ci.price_at_add AS price
+       FROM cart_items ci
+       WHERE ci.cart_id = $1
+       ORDER BY ci.id ASC`,
+      [cartId]
     );
     if (!rows.length) {
-      console.warn("🧺 Carrito vacío user:", req.user.id);
+      await client.query("ROLLBACK");
       return res.status(400).json({ error: "El carrito está vacío" });
     }
 
-    let amount = 0;
+    let amountCents = 0;
+    let total = 0;
     for (const r of rows) {
       const priceNum = Number(r.price);
       const qtyNum = Number(r.quantity);
       if (Number.isNaN(priceNum) || Number.isNaN(qtyNum)) {
-        console.error("❌ price/quantity inválidos:", r);
+        await client.query("ROLLBACK");
         return res.status(400).json({ error: "Datos de carrito inválidos" });
       }
-      amount += Math.round(priceNum * 100) * qtyNum;
+      amountCents += Math.round(priceNum * 100) * qtyNum;
+      total += priceNum * qtyNum;
     }
 
     const currency = (process.env.CURRENCY || "usd").toLowerCase();
-    if (amount <= 0) {
-      console.error("❌ Monto total <= 0:", amount);
+    if (amountCents <= 0) {
+      await client.query("ROLLBACK");
       return res.status(400).json({ error: "Total de carrito inválido" });
     }
-    if (currency === "usd" && amount < 50) {
-      console.warn("⚠️ Monto menor a 50 cents:", amount);
+    if (currency === "usd" && amountCents < 50) {
+      await client.query("ROLLBACK");
       return res.status(400).json({ error: "El total es muy bajo para procesar el pago" });
     }
 
-    console.log("💳 Creando PaymentIntent:", { user_id: req.user.id, amount, currency });
-    const intent = await stripe.paymentIntents.create({
-      amount,
-      currency,
-      metadata: { user_id: String(req.user.id) },
-      automatic_payment_methods: { enabled: true, allow_redirects: "never" },
+    const { rows: orderRows } = await client.query(
+      `INSERT INTO orders (user_id, total, status, payment_status)
+       VALUES ($1, $2, 'pending', 'unpaid')
+       RETURNING id`,
+      [req.user.id, total]
+    );
+    const orderId = orderRows[0].id;
 
+    for (const r of rows) {
+      await client.query(
+        `INSERT INTO order_items (order_id, product_id, quantity, price)
+         VALUES ($1, $2, $3, $4)`,
+        [orderId, r.product_id, r.quantity, r.price]
+      );
+    }
+    await client.query("DELETE FROM cart_items WHERE cart_id=$1", [cartId]);
+
+    const intent = await stripe.paymentIntents.create({
+      amount: amountCents,
+      currency,
+      metadata: { user_id: String(req.user.id), order_id: String(orderId) },
+      automatic_payment_methods: { enabled: true, allow_redirects: "never" },
     });
 
-    console.log("✅ PaymentIntent:", intent.id);
+    await client.query(
+      "UPDATE orders SET stripe_payment_intent_id=$1 WHERE id=$2",
+      [intent.id, orderId]
+    );
+
+    await client.query("COMMIT");
+
     res.json({
       clientSecret: intent.client_secret,
-      amount,
+      amount: amountCents,
       currency,
       payment_intent_id: intent.id,
+      order_id: orderId,
     });
   } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("❌ POST /payments/create-intent:", e?.message || e);
     res.status(500).json({ error: "No se pudo crear el pago", detail: e?.message || String(e) });
+  } finally {
+    client.release();
   }
 });
 

@@ -250,23 +250,16 @@ router.get("/recommendations/:id", async (req, res) => {
 
     // 2) Si faltan, misma categoría (cualquier precio)
     if (out.length < limit && hasCategory) {
+      const excludeIds = out.map((r) => r.id).concat([id]);
       const { rows } = await pool.query(
         `SELECT id, name, description, price::numeric::float8 AS price, stock, category_id
          FROM products
          WHERE id <> $1
            AND category_id = $2
-           AND id NOT IN (${out.map((r) => r.id).concat([id]).map((_,i)=>`$${i+3}`).join(",") || "$3"})
-         ORDER BY ABS(price - $${out.length ? out.length + 3 : 3}) ASC, id DESC
-         LIMIT $${out.length ? out.length + 4 : 4}`,
-        // params dinámicos:
-        (function() {
-          const params = [id, base.category_id];
-          const usedIds = out.map((r) => r.id).concat([id]);
-          params.push(...usedIds);
-          params.push(basePrice);
-          params.push(limit - out.length);
-          return params;
-        })()
+           AND id <> ALL($3::int[])
+         ORDER BY ABS(price - $4) ASC, id DESC
+         LIMIT $5`,
+        [id, base.category_id, excludeIds, basePrice, limit - out.length]
       );
       out.push(...rows);
     }

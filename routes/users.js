@@ -12,7 +12,9 @@ const router = express.Router();
 // Registrar un nuevo usuario
 // =====================
 router.post("/register", validate(registerSchema), async (req, res) => {
-    const { name, email, password, role } = req.body;
+    // El registro público SIEMPRE crea usuarios con role "user".
+    // Un admin se promueve después vía PATCH /admin/users/:id/role.
+    const { name, email, password } = req.body;
     if (!name || !email || !password) {
         return res.status(400).json({ error: "Faltan datos" });
     }
@@ -26,8 +28,8 @@ router.post("/register", validate(registerSchema), async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const result = await pool.query(
-            "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role, created_at",
-            [name, email, hashedPassword, role || "user"]
+            "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, 'user') RETURNING id, name, email, role, created_at",
+            [name, email, hashedPassword]
         );
 
         res.status(201).json(result.rows[0]);

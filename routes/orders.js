@@ -198,6 +198,20 @@ router.delete("/:id", verifyToken, async (req, res) => {
       return res.status(403).json({ error: "No tienes permisos para eliminar este pedido" });
     }
 
+    // Una orden pagada nunca se borra (ni admin): borrarla reponía el stock
+    // sin reembolsar en Stripe ni dejar rastro del cobro. Cancelar una orden
+    // pagada requiere un flujo de reembolso que todavía no existe.
+    const { rows: payRows } = await client.query(
+      "SELECT payment_status FROM orders WHERE id = $1",
+      [orderId]
+    );
+    if (payRows[0].payment_status === "paid") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "No se puede eliminar una orden ya pagada. Cambia su estado en vez de borrarla.",
+      });
+    }
+
     // Si es dueño y no admin, solo si está pending
     if (req.user.role !== "admin") {
       const { rows } = await client.query(
