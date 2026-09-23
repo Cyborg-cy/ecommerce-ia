@@ -97,7 +97,7 @@ router.put("/:id", verifyToken, async (req, res) => {
     const { name, email, password } = req.body;
 
     try {
-        if (parseInt(id) !== req.user.id && !req.user.isAdmin) {
+        if (parseInt(id) !== req.user.id && req.user.role !== "admin") {
             return res.status(403).json({ error: "No autorizado" });
         }
 

@@ -105,6 +105,82 @@ const { rows } = await pool.query(listSQL, params);
 });
 
 /* ==============================
+   GET /products/search  (público)
+   Debe registrarse antes de /:id para no ser interceptada por él
+   ============================== */
+router.get("/search", async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page || "1"), 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || "12"), 1), 60);
+
+    const q = (req.query.q || "").toString().trim();
+    const minPrice = req.query.minPrice ? Number(req.query.minPrice) : null;
+    const maxPrice = req.query.maxPrice ? Number(req.query.maxPrice) : null;
+    const categoryId = req.query.category_id ? parseInt(req.query.category_id, 10) : null;
+    const sort = (req.query.sort || "new").toString(); // new | price_asc | price_desc | name
+
+    const where = [];
+    const params = [];
+
+    if (q) {
+      params.push(`%${q}%`);
+      where.push(`p.name ILIKE $${params.length}`);
+    }
+    if (Number.isFinite(minPrice)) {
+      params.push(minPrice);
+      where.push(`p.price >= $${params.length}`);
+    }
+    if (Number.isFinite(maxPrice)) {
+      params.push(maxPrice);
+      where.push(`p.price <= $${params.length}`);
+    }
+    if (Number.isInteger(categoryId)) {
+      params.push(categoryId);
+      where.push(`p.category_id = $${params.length}`);
+    }
+
+    const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    let orderBy = "p.created_at DESC";
+    if (sort === "price_asc") orderBy = "p.price ASC";
+    else if (sort === "price_desc") orderBy = "p.price DESC";
+    else if (sort === "name") orderBy = "p.name ASC";
+
+    // total
+    const { rows: totalRows } = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM products p ${whereSQL}`,
+      params
+    );
+    const total = totalRows[0]?.total || 0;
+    const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+    const offset = (page - 1) * pageSize;
+
+    // items
+    const { rows: items } = await pool.query(
+      `
+      SELECT
+        p.id, p.name, p.description,
+        p.price::numeric::float8 AS price,
+        p.stock, p.category_id, p.created_at
+      FROM products p
+      ${whereSQL}
+      ORDER BY ${orderBy}
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `,
+      [...params, pageSize, offset]
+    );
+
+    res.json({
+      items,
+      meta: { page, pageSize, total, totalPages },
+    });
+  } catch (err) {
+    console.error("GET /products/search", err);
+    res.status(500).json({ error: "No se pudo listar productos" });
+  }
+});
+
+/* ==============================
    GET /products/:id  (público)
    ============================== */
 router.get("/:id", async (req, res) => {
@@ -309,15 +385,30 @@ router.put("/:id", verifyToken, verifyAdmin, validate(updateProductSchema), asyn
       image_url = image_url === null ? null : String(image_url).trim() || null;
     }
 
+    // Solo actualiza los campos que vinieron en el body, para poder
+    // limpiar a NULL description/category_id/image_url cuando se pide.
+    const sets = [];
+    const vals = [];
+    const setIfPresent = (col, value) => {
+      sets.push(`${col} = $${sets.length + 1}`);
+      vals.push(value);
+    };
+    if (name !== undefined) setIfPresent("name", name);
+    if (description !== undefined) setIfPresent("description", description);
+    if (price !== undefined) setIfPresent("price", price);
+    if (stock !== undefined) setIfPresent("stock", stock);
+    if (category_id !== undefined) setIfPresent("category_id", category_id);
+    if (image_url !== undefined) setIfPresent("image_url", image_url);
+
+    if (!sets.length) {
+      return res.status(400).json({ error: "No enviaste ningún campo para actualizar" });
+    }
+
+    vals.push(id);
     const result = await pool.query(
       `UPDATE products
-          SET name        = COALESCE($1, name),
-              description = COALESCE($2, description),
-              price       = COALESCE($3, price),
-              stock       = COALESCE($4, stock),
-              category_id = COALESCE($5, category_id),
-              image_url   = COALESCE($6, image_url)
-        WHERE id = $7
+          SET ${sets.join(", ")}
+        WHERE id = $${vals.length}
       RETURNING
         id,
         name,
@@ -327,15 +418,7 @@ router.put("/:id", verifyToken, verifyAdmin, validate(updateProductSchema), asyn
         category_id,
         image_url,
         created_at`,
-      [
-        name ?? null,
-        description ?? null,
-        price ?? null,
-        stock ?? null,
-        category_id ?? null,
-        image_url ?? null,
-        id,
-      ]
+      vals
     );
 
     if (!result.rows.length) {
@@ -349,108 +432,6 @@ router.put("/:id", verifyToken, verifyAdmin, validate(updateProductSchema), asyn
   }
 });
 
-router.get("/search", async (req, res) => {
-  try {
-    const page = Math.max(parseInt(req.query.page || "1"), 1);
-    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || "12"), 1), 60);
-
-    const q = (req.query.q || "").toString().trim();
-    const minPrice = req.query.minPrice ? Number(req.query.minPrice) : null;
-    const maxPrice = req.query.maxPrice ? Number(req.query.maxPrice) : null;
-    const categoryId = req.query.category_id ? parseInt(req.query.category_id, 10) : null;
-    const sort = (req.query.sort || "new").toString(); // new | price_asc | price_desc | name
-
-    const where = [];
-    const params = [];
-    
-
-    if (q) {
-      params.push(`%${q}%`);
-      where.push(`p.name ILIKE $${params.length}`);
-    }
-    if (Number.isFinite(minPrice)) {
-      params.push(minPrice);
-      where.push(`p.price >= $${params.length}`);
-    }
-    if (Number.isFinite(maxPrice)) {
-      params.push(maxPrice);
-      where.push(`p.price <= $${params.length}`);
-    }
-    if (Number.isInteger(categoryId)) {
-      params.push(categoryId);
-      where.push(`p.category_id = $${params.length}`);
-    }
-
-    const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
-    let orderBy = "p.created_at DESC";
-    if (sort === "price_asc") orderBy = "p.price ASC";
-    else if (sort === "price_desc") orderBy = "p.price DESC";
-    else if (sort === "name") orderBy = "p.name ASC";
-
-    // total
-    const { rows: totalRows } = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM products p ${whereSQL}`,
-      params
-    );
-    const total = totalRows[0]?.total || 0;
-    const totalPages = Math.max(Math.ceil(total / pageSize), 1);
-    const offset = (page - 1) * pageSize;
-
-    // items
-    const { rows: items } = await pool.query(
-      `
-      SELECT
-        p.id, p.name, p.description,
-        p.price::numeric::float8 AS price,
-        p.stock, p.category_id, p.created_at
-      FROM products p
-      ${whereSQL}
-      ORDER BY ${orderBy}
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-      `,
-      [...params, pageSize, offset]
-    );
-
-    res.json({
-      items,
-      meta: { page, pageSize, total, totalPages },
-    });
-  } catch (err) {
-    console.error("GET /products/search", err);
-    res.status(500).json({ error: "No se pudo listar productos" });
-  }
-});
-
-// (2) DETALLE por ID — robusto
-router.get("/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ error: "ID inválido" });
-    }
-
-    const { rows } = await pool.query(
-      `SELECT
-         p.id,
-         p.name,
-         p.description,
-         p.price::numeric::float8 AS price,
-         p.stock,
-         p.category_id,
-         p.image_url              
-       FROM products p
-       WHERE p.id = $1`,
-      [id]
-    );
-
-    if (!rows.length) return res.status(404).json({ error: "Producto no encontrado" });
-    res.json(rows[0]);
-  } catch (err) {
-    console.error("GET /products/:id", err);
-    res.status(500).json({ error: "Error al obtener producto" });
-  }
-});
 /* =================================================
    DELETE /products/:id  (protegido: token + admin)
    ================================================= */

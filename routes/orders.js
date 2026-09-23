@@ -17,7 +17,7 @@ async function assertOwnerOrAdmin(client, orderId, user) {
   );
   if (!rows.length) return { exists: false, allowed: false };
   const isOwner = rows[0].user_id === user.id;
-  const allowed = isOwner || !!user.is_admin;
+  const allowed = isOwner || user.role === "admin";
   return { exists: true, allowed };
 }
 
@@ -224,7 +224,7 @@ router.put("/:id", verifyToken, validate(updateOrderStatusSchema), async (req, r
       return res.status(404).json({ error: "Pedido no encontrado" });
     }
 
-    if (req.user.is_admin) {
+    if (req.user.role === "admin") {
       // Admin: libre
     } else {
       // Dueño: solo puede cancelar si está pending
@@ -282,7 +282,7 @@ router.delete("/:id", verifyToken, async (req, res) => {
     }
 
     // Si es dueño y no admin, solo si está pending
-    if (!req.user.is_admin) {
+    if (req.user.role !== "admin") {
       const { rows } = await client.query(
         "SELECT status FROM orders WHERE id = $1",
         [orderId]
