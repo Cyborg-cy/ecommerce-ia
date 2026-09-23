@@ -9,7 +9,7 @@ Tienda en línea con backend propio en Node/Express + Postgres, pagos con Stripe
 - PostgreSQL (`pg`)
 - Auth con JWT (access token + refresh token)
 - Stripe (Payment Intents + webhook)
-- Multer + Sharp para subida de imágenes
+- Multer + Cloudinary para subida de imágenes (persistentes; sin Cloudinary configurado cae a disco local, solo válido en dev)
 - Joi para validación de body
 
 **Frontend** (`/ecommerce-frontend`)
@@ -71,7 +71,8 @@ Variables de entorno (`.env` en la raíz):
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | integración de pagos |
 | `CURRENCY` | moneda para Stripe (ej. `usd`) |
 | `CORS_ORIGINS` | orígenes permitidos, separados por coma (los `*.vercel.app` siempre se permiten) |
-| `UPLOADS_DIR` | carpeta donde se guardan las imágenes subidas |
+| `UPLOADS_DIR` | carpeta donde se guardan las imágenes subidas (fallback local, no usado si hay Cloudinary) |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | subida de imágenes persistente. **Obligatorio en producción** — sin esto las imágenes se guardan en el disco del servidor, que en Render no sobrevive un redeploy |
 | `PORT` | puerto del servidor (default 3000) |
 
 ### 3. Frontend
