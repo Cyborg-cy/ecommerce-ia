@@ -8,6 +8,7 @@ type Order = {
   id: number;
   user_id: number;
   status: string;
+  payment_status?: string | null;
   total?: number | null;
   created_at?: string;
   updated_at?: string;
@@ -94,11 +95,16 @@ export default function AdminOrderDetailPage() {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`PUT /admin/orders/${order.id}/status → ${res.status} ${t || ""}`);
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `PUT /admin/orders/${order.id}/status → ${res.status}`);
       }
-      setOrder({ ...order, status: newStatus });
-      toast.success(`Estado → ${newStatus}`);
+      const updated = await res.json();
+      setOrder({ ...order, status: updated.status, payment_status: updated.payment_status });
+      toast.success(
+        updated.payment_status === "refunded"
+          ? `Pedido cancelado y reembolsado en Stripe`
+          : `Estado → ${newStatus}`
+      );
     } catch (e: any) {
       toast.error(e?.message || "No se pudo actualizar el estado");
     } finally {
@@ -122,6 +128,19 @@ export default function AdminOrderDetailPage() {
           <span className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-accent/10 text-accent">
             {order.status}
           </span>
+          {order.payment_status && (
+            <span
+              className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                order.payment_status === "paid"
+                  ? "bg-green-600/10 text-green-700"
+                  : order.payment_status === "refunded"
+                  ? "bg-muted/15 text-muted"
+                  : "bg-amber-500/10 text-amber-700"
+              }`}
+            >
+              pago: {order.payment_status}
+            </span>
+          )}
           <select
             className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm focus:border-accent"
             disabled={updating}

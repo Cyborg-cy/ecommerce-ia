@@ -3,10 +3,18 @@ console.log("ADMIN ROUTER CARGADO");
 
 
 import express from "express";
+import Stripe from "stripe";
 import pool from "../db.js";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
+
+let stripe;
+try {
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-06-20" });
+} catch (e) {
+  console.error("❌ Stripe init error (admin.js):", e?.message || e);
+}
 
 
 // ===== USUARIOS =====
@@ -79,6 +87,12 @@ router.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID inválido" });
   if (!["user", "admin"].includes(role)) return res.status(400).json({ error: "Rol inválido" });
 
+  // Evita que un admin se quite su propio rol por error y se quede sin
+  // forma de volver a entrar al panel.
+  if (Number(req.user?.id) === id && role !== "admin") {
+    return res.status(400).json({ error: "No puedes quitarte tu propio rol de admin." });
+  }
+
   const { rows } = await pool.query(
     "UPDATE users SET role=$1 WHERE id=$2 RETURNING id, name, email, role, created_at",
     [role, id]
@@ -138,6 +152,7 @@ router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
       o.id,
       o.user_id,
       o.status,
+      o.payment_status,
       o.total::numeric::float8 AS total,
       o.created_at,
       u.email
@@ -196,6 +211,9 @@ router.get("/orders/:id", verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // PUT /admin/orders/:id/status  { status }
+// Cancelar una orden que ya está paga reembolsa de verdad en Stripe y
+// repone el stock — antes esto solo cambiaba la etiqueta y dejaba al
+// cliente cobrado sin que nadie se enterara.
 router.put("/orders/:id/status", verifyToken, verifyAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status } = req.body || {};
@@ -203,12 +221,72 @@ router.put("/orders/:id/status", verifyToken, verifyAdmin, async (req, res) => {
   if (!["pending", "paid", "shipped", "cancelled"].includes(status)) {
     return res.status(400).json({ error: "Estado inválido" });
   }
-  const { rows } = await pool.query(
-    "UPDATE orders SET status=$1 WHERE id=$2 RETURNING id, user_id, status, total::numeric::float8 AS total, created_at",
-    [status, id]
-  );
-  if (!rows.length) return res.status(404).json({ error: "Pedido no encontrado" });
-  res.json(rows[0]);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: current } = await client.query(
+      "SELECT status, payment_status, stripe_payment_intent_id FROM orders WHERE id=$1 FOR UPDATE",
+      [id]
+    );
+    if (!current.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Pedido no encontrado" });
+    }
+    const order = current[0];
+    let newPaymentStatus = order.payment_status;
+
+    const cancellingAPaidOrder = status === "cancelled" && order.payment_status === "paid";
+
+    if (cancellingAPaidOrder) {
+      if (!order.stripe_payment_intent_id) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "La orden está pagada pero no tiene un payment_intent para reembolsar.",
+        });
+      }
+      if (!stripe) {
+        await client.query("ROLLBACK");
+        return res.status(500).json({ error: "Stripe no inicializado" });
+      }
+      try {
+        await stripe.refunds.create({ payment_intent: order.stripe_payment_intent_id });
+      } catch (stripeErr) {
+        await client.query("ROLLBACK");
+        console.error("❌ Error reembolsando en Stripe:", stripeErr?.message || stripeErr);
+        return res.status(502).json({ error: "No se pudo procesar el reembolso en Stripe" });
+      }
+
+      // Repone el stock de esta orden (se había descontado al pagar)
+      const { rows: items } = await client.query(
+        "SELECT product_id, quantity FROM order_items WHERE order_id=$1",
+        [id]
+      );
+      for (const it of items) {
+        await client.query(
+          "UPDATE products SET stock = stock + $1 WHERE id = $2",
+          [it.quantity, it.product_id]
+        );
+      }
+      newPaymentStatus = "refunded";
+    }
+
+    const { rows } = await client.query(
+      `UPDATE orders SET status=$1, payment_status=$2 WHERE id=$3
+       RETURNING id, user_id, status, payment_status, total::numeric::float8 AS total, created_at`,
+      [status, newPaymentStatus, id]
+    );
+
+    await client.query("COMMIT");
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("PUT /admin/orders/:id/status", err);
+    res.status(500).json({ error: "No se pudo actualizar el estado" });
+  } finally {
+    client.release();
+  }
 });
 
 /* ---------- STATS (ejemplo que ya tienes) ---------- */

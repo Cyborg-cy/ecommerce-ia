@@ -23,10 +23,26 @@ type Order = {
   id: number;
   user_id: number;
   status: string;
+  payment_status?: string | null;
   total?: number | string | null;
   created_at?: string;
   email?: string;
 };
+
+const PAYMENT_STYLES: Record<string, string> = {
+  paid: "bg-green-600/10 text-green-700",
+  refunded: "bg-muted/15 text-muted",
+  unpaid: "bg-amber-500/10 text-amber-700",
+};
+
+function PaymentBadge({ paymentStatus }: { paymentStatus?: string | null }) {
+  if (!paymentStatus) return <span className="text-muted">—</span>;
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_STYLES[paymentStatus] || "bg-muted/15 text-muted"}`}>
+      {paymentStatus}
+    </span>
+  );
+}
 
 const STATUSES = ["pending", "paid", "shipped", "cancelled"] as const;
 
@@ -124,12 +140,17 @@ export default function AdminOrdersPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || "No se pudo actualizar el estado");
       }
+      const updated = await res.json();
 
       // refresh parcial
       setItems((prev) =>
-        prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o))
+        prev.map((o) => (o.id === id ? { ...o, status: updated.status, payment_status: updated.payment_status } : o))
       );
-      toast.success(`Pedido #${id} → ${newStatus}`);
+      toast.success(
+        updated.payment_status === "refunded"
+          ? `Pedido #${id} cancelado y reembolsado en Stripe`
+          : `Pedido #${id} → ${newStatus}`
+      );
     } catch (e: any) {
       toast.error(e?.message || "Error al actualizar estado");
     } finally {
@@ -210,6 +231,7 @@ export default function AdminOrdersPage() {
                 <th className="px-4 py-3 font-medium">ID</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
+                <th className="px-4 py-3 font-medium">Pago</th>
                 <th className="px-4 py-3 font-medium">Total</th>
                 <th className="px-4 py-3 font-medium">Fecha</th>
                 <th className="px-4 py-3 font-medium">Acciones</th>
@@ -222,6 +244,9 @@ export default function AdminOrdersPage() {
                   <td className="px-4 py-3">{o.email ?? "—"}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={o.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <PaymentBadge paymentStatus={o.payment_status} />
                   </td>
                   <td className="px-4 py-3 font-medium">{fmtMoney(o.total)}</td>
                   <td className="px-4 py-3 text-muted">
@@ -257,7 +282,7 @@ export default function AdminOrdersPage() {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted">
                     No hay pedidos
                   </td>
                 </tr>
