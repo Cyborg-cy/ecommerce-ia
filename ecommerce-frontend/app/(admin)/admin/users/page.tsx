@@ -93,25 +93,33 @@ export default function AdminUsersPage() {
     }
   }
 
-  async function deleteUser(u: User) {
-    if (!confirm(`¿Eliminar al usuario ${u.email}? Esta acción no se puede deshacer.`)) return;
+  async function deleteUser(u: User, force = false) {
+    if (!force && !confirm(`¿Eliminar al usuario ${u.email}? Esta acción no se puede deshacer.`)) return;
     try {
       setDeletingId(u.id);
       const token = localStorage.getItem("token") || "";
-      const url = `${base}/admin/users/${u.id}`;
+      const url = `${base}/admin/users/${u.id}${force ? "?force=true" : ""}`;
       const res = await fetch(url, {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-      if (res.status === 409) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || "El usuario tiene pedidos asociados.");
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409 && data?.canForce) {
+        setDeletingId(null);
+        if (
+          confirm(
+            `${data.error}\n\n¿Borrar de todas formas junto con sus pedidos? Es para limpiar datos de prueba — no se reembolsa nada en Stripe.`
+          )
+        ) {
+          return deleteUser(u, true);
+        }
+        return;
       }
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`DELETE ${url} → ${res.status} ${txt || ""}`.trim());
+        throw new Error(data?.error || `DELETE ${url} → ${res.status}`);
       }
-      toast.success("Usuario eliminado");
+      toast.success(force ? "Usuario y sus pedidos eliminados" : "Usuario eliminado");
       setItems((arr) => arr.filter((x) => x.id !== u.id));
     } catch (e: any) {
       console.error("deleteUser error", e);

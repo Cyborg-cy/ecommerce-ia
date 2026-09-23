@@ -46,6 +46,15 @@ function PaymentBadge({ paymentStatus }: { paymentStatus?: string | null }) {
 
 const STATUSES = ["pending", "paid", "shipped", "cancelled"] as const;
 
+// Espejo de services/orderStatus.js en el backend — evita ofrecer en el
+// selector transiciones que el servidor va a rechazar igual.
+const ALLOWED_NEXT: Record<string, string[]> = {
+  pending: ["cancelled"],
+  paid: ["shipped", "cancelled"],
+  shipped: ["cancelled"],
+  cancelled: [],
+};
+
 function fmtMoney(v?: number | string | null) {
   if (v == null) return "—";
   const n = typeof v === "number" ? v : Number(v);
@@ -164,6 +173,44 @@ export default function AdminOrdersPage() {
     setTo("");
   }
 
+  async function deleteOrder(o: Order, force = false) {
+    if (!force && !confirm(`¿Eliminar el pedido #${o.id}? Esta acción no se puede deshacer.`)) return;
+    try {
+      setUpdatingId(o.id);
+      const token = localStorage.getItem("token") || "";
+      // El borrado vive en /orders/:id (no bajo /admin) — es la misma
+      // ruta que usa el dueño de la orden, solo que un admin puede
+      // pasarle ?force=true.
+      const url = `${base}/orders/${o.id}${force ? "?force=true" : ""}`;
+      const res = await fetch(url, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409 && data?.canForce) {
+        setUpdatingId(null);
+        if (
+          confirm(
+            `${data.error}\n\nEsto NO reembolsa en Stripe — es para limpiar datos de prueba. ¿Borrar de todas formas?`
+          )
+        ) {
+          return deleteOrder(o, true);
+        }
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data?.error || `DELETE ${url} → ${res.status}`);
+      }
+      toast.success(data?.forced ? `Pedido #${o.id} eliminado (sin reembolso)` : `Pedido #${o.id} eliminado`);
+      setItems((prev) => prev.filter((x) => x.id !== o.id));
+    } catch (e: any) {
+      toast.error(e?.message || "No se pudo eliminar el pedido");
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -259,7 +306,7 @@ export default function AdminOrdersPage() {
                       <select
                         className="rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-accent"
                         value=""
-                        disabled={updatingId === o.id}
+                        disabled={updatingId === o.id || (ALLOWED_NEXT[o.status] || []).length === 0}
                         onChange={(e) => {
                           const v = e.target.value;
                           if (v) updateStatus(o.id, v);
@@ -267,7 +314,7 @@ export default function AdminOrdersPage() {
                         }}
                       >
                         <option value="">Cambiar a…</option>
-                        {STATUSES.filter((s) => s !== o.status).map((s) => (
+                        {(ALLOWED_NEXT[o.status] || []).map((s) => (
                           <option key={s} value={s}>
                             {s}
                           </option>
@@ -276,6 +323,13 @@ export default function AdminOrdersPage() {
                       <Link href={`/admin/orders/${o.id}`} className="text-accent hover:underline">
                         Ver
                       </Link>
+                      <button
+                        onClick={() => deleteOrder(o)}
+                        disabled={updatingId === o.id}
+                        className="text-red-600 hover:underline disabled:opacity-50"
+                      >
+                        Eliminar
+                      </button>
                     </div>
                   </td>
                 </tr>

@@ -30,7 +30,13 @@ type Item = {
   line_total: number;
 };
 
-const STATUSES = ["pending", "paid", "shipped", "cancelled"] as const;
+// Espejo de services/orderStatus.js en el backend.
+const ALLOWED_NEXT: Record<string, string[]> = {
+  pending: ["cancelled"],
+  paid: ["shipped", "cancelled"],
+  shipped: ["cancelled"],
+  cancelled: [],
+};
 
 export default function AdminOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -112,6 +118,41 @@ export default function AdminOrderDetailPage() {
     }
   }
 
+  async function deleteOrder(force = false) {
+    if (!order) return;
+    if (!force && !confirm(`¿Eliminar el pedido #${order.id}? Esta acción no se puede deshacer.`)) return;
+    try {
+      setUpdating(true);
+      const token = localStorage.getItem("token") || "";
+      const res = await fetch(`${base}/orders/${order.id}${force ? "?force=true" : ""}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409 && data?.canForce) {
+        setUpdating(false);
+        if (
+          confirm(
+            `${data.error}\n\nEsto NO reembolsa en Stripe — es para limpiar datos de prueba. ¿Borrar de todas formas?`
+          )
+        ) {
+          return deleteOrder(true);
+        }
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data?.error || `DELETE /orders/${order.id} → ${res.status}`);
+      }
+      toast.success(data?.forced ? "Pedido eliminado (sin reembolso)" : "Pedido eliminado");
+      r.push("/admin/orders");
+    } catch (e: any) {
+      toast.error(e?.message || "No se pudo eliminar el pedido");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
   const fmt = (n?: number | null) =>
     n == null ? "—" : `$${Number(n).toFixed(2)}`;
 
@@ -152,10 +193,17 @@ export default function AdminOrderDetailPage() {
             }}
           >
             <option value="">Cambiar a…</option>
-            {STATUSES.filter(s => s !== order.status).map(s => (
+            {(ALLOWED_NEXT[order.status] || []).map(s => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
+          <button
+            onClick={() => deleteOrder(false)}
+            disabled={updating}
+            className="text-sm text-red-600 hover:underline disabled:opacity-50"
+          >
+            Eliminar
+          </button>
         </div>
       </div>
 

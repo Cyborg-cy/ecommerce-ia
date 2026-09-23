@@ -103,35 +103,67 @@ router.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
   res.json(rows[0]);
 });
 
-// DELETE /admin/users/:id
+// DELETE /admin/users/:id?force=true
+// force=true borra también las órdenes/order_items/carrito del usuario —
+// pensado para limpiar datos de prueba. No reembolsa en Stripe ninguna
+// orden pagada que se lleve por delante: si el usuario tiene compras
+// reales, mejor no forzar esto.
 router.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
   const targetId = parseInt(req.params.id, 10);
   if (!Number.isInteger(targetId) || targetId <= 0) {
     return res.status(400).json({ error: "ID inválido" });
   }
+  const force = req.query.force === "true";
+
+  const client = await pool.connect();
   try {
-    // Evita borrarte a ti mismo
+    await client.query("BEGIN");
+
+    // Evita borrarte a ti mismo, incluso con force
     const me = req.user?.id;
     if (Number(me) === targetId) {
+      await client.query("ROLLBACK");
       return res.status(400).json({ error: "No puedes eliminar tu propio usuario." });
     }
     // Verifica existencia
-    const u = await pool.query("SELECT id FROM users WHERE id=$1", [targetId]);
-    if (!u.rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+    const u = await client.query("SELECT id FROM users WHERE id=$1", [targetId]);
+    if (!u.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
 
-    // Si tiene pedidos, bloquea (409)
-    const o = await pool.query("SELECT COUNT(*)::int AS c FROM orders WHERE user_id=$1", [targetId]);
-    if ((o.rows[0]?.c ?? 0) > 0) {
+    const o = await client.query("SELECT id FROM orders WHERE user_id=$1", [targetId]);
+    const orderIds = o.rows.map((r) => r.id);
+
+    if (orderIds.length > 0 && !force) {
+      await client.query("ROLLBACK");
       return res.status(409).json({
-        error: `No se puede eliminar: el usuario tiene ${o.rows[0].c} pedido(s) asociados.`,
+        error: `No se puede eliminar: el usuario tiene ${orderIds.length} pedido(s) asociados. Si es un dato de prueba, reintenta con ?force=true.`,
+        canForce: true,
+        count: orderIds.length,
       });
     }
 
-    await pool.query("DELETE FROM users WHERE id=$1", [targetId]);
-    res.json({ ok: true });
+    if (orderIds.length > 0) {
+      await client.query("DELETE FROM order_items WHERE order_id = ANY($1::int[])", [orderIds]);
+      await client.query("DELETE FROM orders WHERE id = ANY($1::int[])", [orderIds]);
+    }
+    await client.query(
+      "DELETE FROM cart_items WHERE cart_id IN (SELECT id FROM carts WHERE user_id=$1)",
+      [targetId]
+    );
+    await client.query("DELETE FROM carts WHERE user_id=$1", [targetId]);
+    await client.query("DELETE FROM refresh_tokens WHERE user_id=$1", [targetId]);
+    await client.query("DELETE FROM users WHERE id=$1", [targetId]);
+
+    await client.query("COMMIT");
+    res.json({ ok: true, forced: orderIds.length > 0, deletedOrders: orderIds.length });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("DELETE /admin/users/:id", err);
     res.status(500).json({ error: "No se pudo eliminar el usuario" });
+  } finally {
+    client.release();
   }
 });
 

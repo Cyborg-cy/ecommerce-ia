@@ -174,22 +174,30 @@ router.delete("/:id", verifyToken, async (req, res) => {
       return res.status(403).json({ error: "No tienes permisos para eliminar este pedido" });
     }
 
-    // Una orden pagada nunca se borra (ni admin): borrarla reponía el stock
-    // sin reembolsar en Stripe ni dejar rastro del cobro. Cancelar una orden
-    // pagada requiere un flujo de reembolso que todavía no existe.
+    // Un admin puede forzar el borrado de una orden pagada con
+    // ?force=true — pensado para limpiar datos de prueba, NO para
+    // "cancelar" un pedido real: esto no reembolsa en Stripe. Si hay
+    // que devolverle el dinero a un cliente de verdad, se usa el
+    // cambio de estado a "cancelled" (services/orderStatus.js), que sí
+    // reembolsa. Un dueño normal nunca puede forzar esto.
+    const isAdmin = req.user.role === "admin";
+    const force = req.query.force === "true" && isAdmin;
+
     const { rows: payRows } = await client.query(
       "SELECT payment_status FROM orders WHERE id = $1",
       [orderId]
     );
-    if (payRows[0].payment_status === "paid") {
+    const wasPaid = payRows[0].payment_status === "paid";
+    if (wasPaid && !force) {
       await client.query("ROLLBACK");
       return res.status(409).json({
-        error: "No se puede eliminar una orden ya pagada. Cambia su estado en vez de borrarla.",
+        error: "No se puede eliminar una orden ya pagada. Cambia su estado a cancelada (reembolsa de verdad) o, si es un dato de prueba, reintenta con ?force=true.",
+        canForce: isAdmin,
       });
     }
 
     // Si es dueño y no admin, solo si está pending
-    if (req.user.role !== "admin") {
+    if (!isAdmin) {
       const { rows } = await client.query(
         "SELECT status FROM orders WHERE id = $1",
         [orderId]
@@ -220,7 +228,13 @@ router.delete("/:id", verifyToken, async (req, res) => {
     );
 
     await client.query("COMMIT");
-    res.json({ message: "Pedido eliminado correctamente", order: del[0] });
+    res.json({
+      message: wasPaid
+        ? "Pedido eliminado (estaba pagado, NO se reembolsó en Stripe)"
+        : "Pedido eliminado correctamente",
+      order: del[0],
+      forced: wasPaid,
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ DELETE /orders/:id:", err);
