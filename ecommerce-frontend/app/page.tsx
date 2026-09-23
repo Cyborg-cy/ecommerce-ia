@@ -46,12 +46,12 @@ export default async function HomePage() {
       <section className="border-b border-border bg-surface">
         <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
           <div className="max-w-lg">
-            <p className="text-sm text-accent font-medium mb-3">Nueva colección</p>
+            <p className="text-sm text-accent font-medium mb-3">VENTA LETAL</p>
             <h1 className="font-serif text-4xl md:text-5xl leading-[1.1] mb-5">
-              Cosas buenas, elegidas con cuidado.
+              Herramientas buenas, elegidas con cuidado.
             </h1>
             <p className="text-muted text-lg mb-8 max-w-md">
-              Productos seleccionados, precios claros y envíos que llegan cuando dicen que llegan.
+              Productos seleccionados, precios claros y resolucion de problemas.
             </p>
             <Link
               href="/products"
