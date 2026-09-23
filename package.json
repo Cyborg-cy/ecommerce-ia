@@ -1,7 +1,5 @@
 {
   "dependencies": {
-    "@stripe/react-stripe-js": "^4.0.0",
-    "@stripe/stripe-js": "^7.9.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -13,8 +11,6 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "pg": "^8.16.3",
-    "react-hot-toast": "^2.6.0",
-    "sharp": "^0.34.4",
     "stripe": "^18.5.0"
   },
   "name": "ecommerce-ia",
@@ -31,7 +27,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/react": "^19.1.12",
     "nodemon": "^3.1.10"
   }
 }
