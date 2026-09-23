@@ -1,27 +1,6 @@
 // middleware/validate.js  (body-only, soporta Joi/Zod)
 export const validate = (schema) => async (req, res, next) => {
   try {
-    // Log mínimo para diagnosticar body vacío en validaciones (se puede quitar luego)
-    if (process.env.NODE_ENV !== "production") {
-      try {
-        // Evita loguear payloads enormes
-        const preview = typeof req.body === "object" ? JSON.stringify(req.body).slice(0, 500) : String(req.body);
-        // eslint-disable-next-line no-console
-        console.log(
-          "[validate]",
-          req.method,
-          req.originalUrl,
-          "ct=",
-          req.headers["content-type"],
-          "len=",
-          req.headers["content-length"],
-          "keys=",
-          typeof req.body === "object" && req.body ? Object.keys(req.body).length : 0
-        );
-        // eslint-disable-next-line no-console
-        console.log("[validate] Incoming body preview:", preview || "<empty>");
-      } catch {}
-    }
     // Normaliza: si body viene como string JSON, parsearlo primero
     if (typeof req.body === "string" && req.body.trim().startsWith("{")) {
       try {

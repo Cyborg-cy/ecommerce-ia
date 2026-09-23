@@ -2,25 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { decodeJWTPayload } from "@/lib/jwt";
 
-function b64urlToB64(s: string) {
-  return s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
-}
-function decodeJWTPayload(token: string): any | null {
-  try {
-    const [, payload] = token.split(".");
-    if (!payload) return null;
-    const json = atob(b64urlToB64(payload));
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
 function isAdminFromPayload(p: any): boolean {
   if (!p || typeof p !== "object") return false;
-  if (p.role === "admin") return true;
-  if (p.is_admin === true) return true; // compat
-  return false;
+  return p.role === "admin";
 }
 
 export default function AdminGate({ children }: { children: React.ReactNode }) {

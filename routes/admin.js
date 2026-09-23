@@ -179,8 +179,8 @@ router.get("/orders/:id", verifyToken, verifyAdmin, async (req, res) => {
          p.name,
          p.image_url,
          oi.quantity,
-         oi.unit_price::numeric::float8 AS unit_price,
-         (oi.quantity * oi.unit_price)::numeric::float8 AS line_total
+         oi.price::numeric::float8 AS unit_price,
+         (oi.quantity * oi.price)::numeric::float8 AS line_total
        FROM order_items oi
        JOIN products p ON p.id = oi.product_id
        WHERE oi.order_id=$1
@@ -327,23 +327,24 @@ router.delete("/categories/:id", verifyToken, verifyAdmin, async (req, res) => {
     }
   }
 
+  const client = await pool.connect();
   try {
-    await pool.query("BEGIN");
+    await client.query("BEGIN");
 
-    const cat = await pool.query("SELECT id FROM categories WHERE id=$1", [id]);
+    const cat = await client.query("SELECT id FROM categories WHERE id=$1", [id]);
     if (!cat.rows.length) {
-      await pool.query("ROLLBACK");
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Categoría no encontrada" });
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await client.query(
       "SELECT COUNT(*)::int AS count FROM products WHERE category_id=$1",
       [id]
     );
     const count = rows[0]?.count ?? 0;
 
     if (count > 0 && reassignTo === null) {
-      await pool.query("ROLLBACK");
+      await client.query("ROLLBACK");
       return res.status(409).json({
         error: `No se puede eliminar: hay ${count} producto(s) usando esta categoría`,
         needReassign: true,
@@ -352,24 +353,26 @@ router.delete("/categories/:id", verifyToken, verifyAdmin, async (req, res) => {
     }
 
     if (count > 0 && reassignTo !== null) {
-      const dst = await pool.query("SELECT id FROM categories WHERE id=$1", [reassignTo]);
+      const dst = await client.query("SELECT id FROM categories WHERE id=$1", [reassignTo]);
       if (!dst.rows.length) {
-        await pool.query("ROLLBACK");
+        await client.query("ROLLBACK");
         return res.status(400).json({ error: "La categoría destino no existe" });
       }
-      await pool.query(
+      await client.query(
         "UPDATE products SET category_id=$1 WHERE category_id=$2",
         [reassignTo, id]
       );
     }
 
-    await pool.query("DELETE FROM categories WHERE id=$1", [id]);
-    await pool.query("COMMIT");
+    await client.query("DELETE FROM categories WHERE id=$1", [id]);
+    await client.query("COMMIT");
     res.json({ ok: true });
   } catch (err) {
-    await pool.query("ROLLBACK").catch(() => {});
+    await client.query("ROLLBACK").catch(() => {});
     console.error("DELETE /admin/categories/:id", err);
     res.status(500).json({ error: "No se pudo eliminar la categoría" });
+  } finally {
+    client.release();
   }
 });
 

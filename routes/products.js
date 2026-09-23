@@ -438,8 +438,17 @@ router.put("/:id", verifyToken, verifyAdmin, validate(updateProductSchema), asyn
 router.delete("/:id", verifyToken, verifyAdmin, async (req, res) => {
   const { id } = req.params;
   try {
-    // Elimina referencias en order_items si existen
-    await pool.query("DELETE FROM order_items WHERE product_id = $1", [id]);
+    // No permitir borrar productos que ya aparecen en pedidos pasados
+    // (borrar sus order_items destruiría el historial de esos pedidos)
+    const used = await pool.query(
+      "SELECT COUNT(*)::int AS c FROM order_items WHERE product_id = $1",
+      [id]
+    );
+    if ((used.rows[0]?.c ?? 0) > 0) {
+      return res.status(409).json({
+        error: `No se puede eliminar: el producto aparece en ${used.rows[0].c} línea(s) de pedidos existentes.`,
+      });
+    }
 
     const result = await pool.query(
       "DELETE FROM products WHERE id = $1 RETURNING id, name, description, price::numeric::float8 AS price, stock, created_at, category_id",

@@ -11,7 +11,7 @@ import toast from "react-hot-toast";
  * Este componente SÍ usa useSearchParams y lo montamos dentro de <Suspense>.
  */
 function LoginInner() {
-  const { setToken, setUser } = useAuth();
+  const { login } = useAuth();
   const sp = useSearchParams();
   const r = useRouter();
 
@@ -26,6 +26,10 @@ function LoginInner() {
     if (t) {
       const next = sp.get("next") || "/admin"; // vuelve a donde ibas (por defecto /admin)
       r.replace(next);
+      return;
+    }
+    if (sp.get("expired") === "1") {
+      setMsg("Tu sesión expiró, inicia sesión de nuevo.");
     }
   }, [sp, r]);
 
@@ -34,14 +38,12 @@ function LoginInner() {
     setMsg(null);
     setLoading(true);
     try {
-      const res = await loginUser({ email, password }); // espera { token, user? }
-      const token = res?.token;
-      if (!token) throw new Error("Respuesta inválida del servidor (sin token).");
+      const res = await loginUser({ email, password }); // { accessToken, refreshToken }
+      if (!res?.accessToken) throw new Error("Respuesta inválida del servidor (sin token).");
 
-      setToken(token);
-      if (res.user) setUser?.(res.user);
+      login(res.accessToken, res.refreshToken);
 
-      toast.success(`Bienvenido${res.user?.name ? `, ${res.user.name}` : ""}!`);
+      toast.success("Bienvenido!");
 
       const next = sp.get("next") || "/admin";
       r.replace(next);

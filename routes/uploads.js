@@ -3,6 +3,7 @@ import express from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ router.get("/__health", (_req, res) => {
 });
 
 // ⚠️ IMPORTANTE: el nombre del campo es 'file' (así lo mandas en el front)
-router.post("/image", upload.single("file"), (req, res) => {
+router.post("/image", verifyToken, verifyAdmin, upload.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No se recibió archivo" });
   }

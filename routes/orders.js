@@ -2,7 +2,7 @@
 import express from "express";
 import pool from "../db.js";
 import { validate } from "../middleware/validate.js";
-import { createOrderSchema, updateOrderStatusSchema } from "../schemas/orderSchemas.js";
+import { updateOrderStatusSchema } from "../schemas/orderSchemas.js";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 
 
@@ -21,93 +21,10 @@ async function assertOwnerOrAdmin(client, orderId, user) {
   return { exists: true, allowed };
 }
 
-/**
- * POST /orders
- * Crea una orden (sin Stripe) desde items enviados: [{ product_id, quantity }]
- * - Valida stock
- * - Inserta order + order_items
- * - Descuenta stock
- * - Todo en transacción
- */
-router.post("/", verifyToken, validate(createOrderSchema), async (req, res) => {
-  const { items } = req.body; // [{ product_id, quantity }]
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: "Debe enviar al menos un producto" });
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    // Valida y calcula total
-    let total = 0;
-    for (const it of items) {
-      const pid = Number(it.product_id);
-      const qty = Number(it.quantity);
-      if (!pid || !qty || qty <= 0) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: "Items inválidos" });
-      }
-
-      const { rows } = await client.query(
-        "SELECT price, COALESCE(stock, 0) AS stock FROM products WHERE id=$1",
-        [pid]
-      );
-      if (!rows.length) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: `Producto ${pid} no encontrado` });
-      }
-      const price = Number(rows[0].price);
-      const stock = Number(rows[0].stock);
-      if (qty > stock) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: `Stock insuficiente para producto ${pid}` });
-      }
-      total += price * qty;
-    }
-
-    // Crea cabecera
-    const { rows: orderRows } = await client.query(
-      `INSERT INTO orders (user_id, total, status, payment_status)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, user_id, total, status, payment_status, created_at`,
-      [req.user.id, total, "pending", "unpaid"]
-    );
-    const order = orderRows[0];
-
-    // Inserta items y descuenta stock
-    for (const it of items) {
-      const pid = Number(it.product_id);
-      const qty = Number(it.quantity);
-
-      const { rows: pRows } = await client.query(
-        "SELECT price FROM products WHERE id=$1",
-        [pid]
-      );
-      const price = Number(pRows[0].price);
-
-      await client.query(
-        `INSERT INTO order_items (order_id, product_id, quantity, price)
-         VALUES ($1, $2, $3, $4)`,
-        [order.id, pid, qty, price]
-      );
-
-      await client.query(
-        "UPDATE products SET stock = stock - $1 WHERE id = $2",
-        [qty, pid]
-      );
-    }
-
-    await client.query("COMMIT");
-    return res.status(201).json({ message: "Pedido creado", order });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("❌ POST /orders:", err);
-    return res.status(500).json({ error: "Error al crear pedido" });
-  } finally {
-    client.release();
-  }
-});
+// El checkout real pasa por /payments/create-intent (Stripe) + el webhook
+// en routes/stripeWebhook.js, que es quien crea la orden tras confirmar el pago.
+// Existió aquí una ruta POST / que creaba pedidos y descontaba stock sin pasar
+// por Stripe — se eliminó por ser un bypass de pago.
 
 /**
  * GET /orders
@@ -182,8 +99,8 @@ router.get("/:id", verifyToken, async (req, res) => {
     const { rows: items } = await pool.query(
       `SELECT
          oi.id, oi.product_id, p.name, p.image_url,
-         oi.quantity, oi.unit_price::numeric::float8 AS unit_price,
-         (oi.quantity * oi.unit_price)::numeric::float8 AS line_total
+         oi.quantity, oi.price::numeric::float8 AS unit_price,
+         (oi.quantity * oi.price)::numeric::float8 AS line_total
        FROM order_items oi
        JOIN products p ON p.id = oi.product_id
        WHERE oi.order_id=$1

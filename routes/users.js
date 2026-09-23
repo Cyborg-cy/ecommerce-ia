@@ -1,10 +1,9 @@
 import express from "express";
 import pool from "../db.js";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { registerSchema, loginSchema } from "../schemas/userSchemas.js"
+import { registerSchema } from "../schemas/userSchemas.js"
 
 const router = express.Router();
 
@@ -38,41 +37,9 @@ router.post("/register", validate(registerSchema), async (req, res) => {
     }
 });
 
-// =====================
-// POST /users/login
-// Iniciar sesión
-// =====================
-router.post("/login", validate(loginSchema), async (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-        return res.status(400).json({ error: "Faltan datos" });
-    }
-
-    try {
-        const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-        const user = result.rows[0];
-
-        if (!user || !user.password) {
-            return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
-        }
-
-        const match = await bcrypt.compare(password, user.password);
-        if (!match) {
-            return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
-        }
-
-        const token = jwt.sign(
-            { id: user.id, name: user.name, email: user.email, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: "1h" }
-        );
-
-        res.json({ token });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Error al iniciar sesión" });
-    }
-});
+// El login vive en POST /auth/login (routes/auth.js), que además emite
+// refresh token. Antes existía POST /users/login duplicado y desincronizado
+// (sin refresh, expiración hardcodeada) — se eliminó.
 
 // =====================
 // GET /users

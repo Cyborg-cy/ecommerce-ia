@@ -49,6 +49,17 @@ router.post(
         try {
           await client.query("BEGIN");
 
+          // Idempotencia: si Stripe reintenta el evento, no duplicar la orden
+          const already = await client.query(
+            "SELECT id FROM orders WHERE stripe_payment_intent_id=$1",
+            [pi.id]
+          );
+          if (already.rows.length) {
+            console.log(`↩️ Evento ya procesado para intent ${pi.id}, se ignora`);
+            await client.query("COMMIT");
+            return res.status(200).send("ok");
+          }
+
           // Obtener carrito e items
           const cart = await client.query(
             "SELECT id FROM carts WHERE user_id=$1",
@@ -78,14 +89,29 @@ router.post(
           );
 
           // Insertar items y descontar stock
+          // Bloqueamos la fila del producto (FOR UPDATE) para que dos pagos
+          // concurrentes del mismo producto no lean el mismo stock a la vez.
           for (const it of items.rows) {
             await client.query(
               `INSERT INTO order_items (order_id, product_id, quantity, price)
                VALUES ($1, $2, $3, $4)`,
               [orderRes.rows[0].id, it.product_id, it.quantity, it.price]
             );
+
+            const { rows: locked } = await client.query(
+              `SELECT stock FROM products WHERE id = $1 FOR UPDATE`,
+              [it.product_id]
+            );
+            const currentStock = Number(locked[0]?.stock ?? 0);
+            if (currentStock < it.quantity) {
+              // El pago ya se cobró en Stripe y no se puede deshacer aquí;
+              // dejamos el stock en 0 y avisamos para que se resuelva a mano.
+              console.warn(
+                `⚠️ Sobreventa: producto ${it.product_id} tenía ${currentStock} y se vendieron ${it.quantity} (orden ${orderRes.rows[0].id})`
+              );
+            }
             await client.query(
-              `UPDATE products SET stock = stock - $1 WHERE id = $2`,
+              `UPDATE products SET stock = GREATEST(stock - $1, 0) WHERE id = $2`,
               [it.quantity, it.product_id]
             );
           }

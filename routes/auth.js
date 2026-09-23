@@ -3,6 +3,8 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import bcrypt from "bcrypt";
+import { validate } from "../middleware/validate.js";
+import { loginSchema } from "../schemas/userSchemas.js";
 
 const router = express.Router();
 
@@ -35,8 +37,8 @@ function cryptoRandom(len) {
   return out;
 }
 
-/* POST /auth/login (igual que tu /users/login, pero devuelve refresh) */
-router.post("/login", async (req, res) => {
+/* POST /auth/login -> { accessToken, refreshToken } */
+router.post("/login", validate(loginSchema), async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password)
     return res.status(400).json({ error: "Faltan datos" });

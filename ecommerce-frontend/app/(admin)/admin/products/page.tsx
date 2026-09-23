@@ -67,11 +67,11 @@ export default function AdminProductsPage() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      toast.success(`Producto #${id} eliminado`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || "No se pudo eliminar");
       }
+      toast.success(`Producto #${id} eliminado`);
       await load();
     } catch (e: any) {
       toast.error(e?.message || "Error al eliminar");

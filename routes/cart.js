@@ -174,76 +174,9 @@ router.delete("/item/:productId", verifyToken, async (req, res) => {
   }
 });
 
-/** POST /cart/checkout */
-router.post("/checkout", verifyToken, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    const cartId = await ensureCart(req.user.id);
-
-    const items = await client.query(
-      `SELECT ci.product_id, ci.quantity, ci.price_at_add AS price
-       FROM cart_items ci
-       WHERE ci.cart_id = $1
-       ORDER BY ci.id ASC`,
-      [cartId]
-    );
-
-    if (!items.rows.length) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: "El carrito está vacío" });
-    }
-
-    // Validar stock y calcular total
-    let total = 0;
-    for (const it of items.rows) {
-      const p = await client.query(
-        "SELECT stock FROM products WHERE id=$1",
-        [it.product_id]
-      );
-      if (!p.rows.length) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: `Producto ${it.product_id} no existe` });
-      }
-      const stock = Number(p.rows[0].stock ?? 0);
-      if (it.quantity > stock) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: `Stock insuficiente para producto ${it.product_id}` });
-      }
-      total += Number(it.price) * it.quantity;
-    }
-
-    // Crear orden
-    const order = await client.query(
-      "INSERT INTO orders (user_id, total, status) VALUES ($1, $2, $3) RETURNING id, user_id, total, status, created_at",
-      [req.user.id, total, "pending"]
-    );
-
-    // Insertar items + descontar stock
-    for (const it of items.rows) {
-      await client.query(
-        "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ($1, $2, $3, $4)",
-        [order.rows[0].id, it.product_id, it.quantity, it.price]
-      );
-      await client.query(
-        "UPDATE products SET stock = stock - $1 WHERE id=$2",
-        [it.quantity, it.product_id]
-      );
-    }
-
-    // Limpiar carrito
-    await client.query("DELETE FROM cart_items WHERE cart_id=$1", [cartId]);
-
-    await client.query("COMMIT");
-    res.status(201).json({ message: "Orden creada", order: order.rows[0] });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("❌ POST /cart/checkout:", err);
-    res.status(500).json({ error: "Error en checkout" });
-  } finally {
-    client.release();
-  }
-});
+// El checkout real pasa por /payments/create-intent (Stripe) + el webhook
+// en routes/stripeWebhook.js, que es quien crea la orden tras confirmar el pago.
+// Existió aquí una ruta POST /checkout que creaba la orden y descontaba stock
+// sin pasar por Stripe — se eliminó por ser un bypass de pago.
 
 export default router;
