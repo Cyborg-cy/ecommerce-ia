@@ -4,7 +4,14 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loginUser } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth";
+import { decodeJWTPayload } from "@/lib/jwt";
 import toast from "react-hot-toast";
+
+/** A dónde mandar por defecto según el rol, cuando no hay ?next= */
+function defaultDestination(accessToken: string) {
+  const payload = decodeJWTPayload(accessToken);
+  return payload?.role === "admin" ? "/admin" : "/";
+}
 
 /** 
  * Extrae toda tu lógica actual a un componente interno.
@@ -24,7 +31,7 @@ function LoginInner() {
   useEffect(() => {
     const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (t) {
-      const next = sp.get("next") || "/"; // vuelve a donde ibas (por defecto home)
+      const next = sp.get("next") || defaultDestination(t); // admin -> /admin, resto -> home
       r.replace(next);
       return;
     }
@@ -45,7 +52,7 @@ function LoginInner() {
 
       toast.success("Bienvenido!");
 
-      const next = sp.get("next") || "/";
+      const next = sp.get("next") || defaultDestination(res.accessToken);
       r.replace(next);
     } catch (err: any) {
       setMsg(err?.response?.data?.error || err?.message || "Error al iniciar sesión");
