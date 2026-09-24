@@ -1,5 +1,6 @@
 // routes/orders.js
 import express from "express";
+import Stripe from "stripe";
 import pool from "../db.js";
 import { validate } from "../middleware/validate.js";
 import { updateOrderStatusSchema } from "../schemas/orderSchemas.js";
@@ -8,6 +9,13 @@ import { transitionOrderStatus, OrderTransitionError } from "../services/orderSt
 
 
 const router = express.Router();
+
+let stripe;
+try {
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-06-20" });
+} catch (e) {
+  console.error("❌ Stripe init error (orders):", e?.message || e);
+}
 
 
 /** Helper: verifica que el usuario sea el dueño de la orden o admin */
@@ -184,10 +192,11 @@ router.delete("/:id", verifyToken, async (req, res) => {
     const force = req.query.force === "true" && isAdmin;
 
     const { rows: payRows } = await client.query(
-      "SELECT payment_status FROM orders WHERE id = $1",
+      "SELECT payment_status, stripe_payment_intent_id FROM orders WHERE id = $1 FOR UPDATE",
       [orderId]
     );
     const wasPaid = payRows[0].payment_status === "paid";
+    const intentId = payRows[0].stripe_payment_intent_id;
     if (wasPaid && !force) {
       await client.query("ROLLBACK");
       return res.status(409).json({
@@ -206,6 +215,23 @@ router.delete("/:id", verifyToken, async (req, res) => {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Solo puedes eliminar órdenes pendientes" });
       }
+    }
+
+    // Orden sin pagar: se cancela su pago en Stripe antes de borrarla, para
+    // que no se pueda cobrar después (el webhook ya no encontraría la orden).
+    if (!wasPaid && intentId) {
+      if (!stripe) {
+        await client.query("ROLLBACK");
+        return res.status(500).json({ error: "Stripe no inicializado" });
+      }
+      const intent = await stripe.paymentIntents.retrieve(intentId);
+      if (intent.status === "succeeded" || intent.status === "processing") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "El pago de este pedido ya se está procesando; espera a que se confirme.",
+        });
+      }
+      if (intent.status !== "canceled") await stripe.paymentIntents.cancel(intentId);
     }
 
     // Devuelve stock solo si estaba pagada: el stock se descuenta en el
