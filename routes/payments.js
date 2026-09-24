@@ -22,9 +22,9 @@ try {
  * - Toma el carrito, lo convierte en una orden pending/unpaid con sus
  *   items (foto fija, ya no se puede alterar por cambios posteriores en
  *   el carrito) y crea el PaymentIntent para exactamente esa orden.
- * - El carrito se vacía aquí mismo: lo que se cobra queda reservado en
- *   la orden, no se puede pagar dos veces ni cobrar algo distinto a lo
- *   que finalmente se entrega.
+ * - El carrito NO se vacía aquí: si el usuario abandona el pago, conserva
+ *   su carrito. Lo vacía el webhook de Stripe cuando el pago se confirma.
+ *   Lo que se cobra es la foto fija guardada en la orden, no el carrito.
  * - Body: { shipping: { name, phone?, address_line, city, zip }, save_to_profile? }
  *   La dirección se copia a la orden: si el usuario cambia su perfil después,
  *   el pedido conserva la dirección a la que se envió.
@@ -40,6 +40,26 @@ router.post("/create-intent", verifyToken, validate(createIntentSchema), async (
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // Intentos de pago anteriores sin terminar: se cancelan en Stripe y se
+    // borra su orden, para que reintentar no acumule pedidos pendientes.
+    // No se toca el stock: solo se descuenta cuando el webhook confirma el pago.
+    const { rows: stale } = await client.query(
+      `SELECT id, stripe_payment_intent_id FROM orders
+       WHERE user_id=$1 AND status='pending' AND payment_status='unpaid'
+       FOR UPDATE`,
+      [req.user.id]
+    );
+    for (const o of stale) {
+      if (o.stripe_payment_intent_id) {
+        const old = await stripe.paymentIntents.retrieve(o.stripe_payment_intent_id);
+        // Ya pagado (o en proceso) pero el webhook aún no llega: no se borra.
+        if (old.status === "succeeded" || old.status === "processing") continue;
+        if (old.status !== "canceled") await stripe.paymentIntents.cancel(old.id);
+      }
+      await client.query("DELETE FROM order_items WHERE order_id=$1", [o.id]);
+      await client.query("DELETE FROM orders WHERE id=$1", [o.id]);
+    }
 
     const cart = await client.query("SELECT id FROM carts WHERE user_id=$1", [req.user.id]);
     if (!cart.rows.length) {
@@ -106,8 +126,6 @@ router.post("/create-intent", verifyToken, validate(createIntentSchema), async (
         [orderId, r.product_id, r.quantity, r.price]
       );
     }
-    await client.query("DELETE FROM cart_items WHERE cart_id=$1", [cartId]);
-
     const intent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency,

@@ -48,7 +48,7 @@ router.post(
           await client.query("BEGIN");
 
           const { rows: orderRows } = await client.query(
-            "SELECT id, payment_status FROM orders WHERE id=$1 FOR UPDATE",
+            "SELECT id, user_id, payment_status FROM orders WHERE id=$1 FOR UPDATE",
             [orderId]
           );
           if (!orderRows.length) {
@@ -94,6 +94,14 @@ router.post(
           await client.query(
             "UPDATE orders SET status='paid', payment_status='paid', stripe_payment_intent_id=$1 WHERE id=$2",
             [pi.id, orderId]
+          );
+
+          // El carrito se vacía hasta aquí (no al crear el intent) para que,
+          // si el usuario abandona el pago, no pierda lo que tenía.
+          await client.query(
+            `DELETE FROM cart_items
+             WHERE cart_id IN (SELECT id FROM carts WHERE user_id = $1)`,
+            [orderRows[0].user_id]
           );
 
           await client.query("COMMIT");
