@@ -161,7 +161,7 @@ router.get("/search", async (req, res) => {
       SELECT
         p.id, p.name, p.description,
         p.price::numeric::float8 AS price,
-        p.stock, p.category_id, p.created_at
+        p.stock, p.category_id, p.image_url, p.created_at
       FROM products p
       ${whereSQL}
       ORDER BY ${orderBy}
