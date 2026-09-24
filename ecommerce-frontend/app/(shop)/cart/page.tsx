@@ -11,6 +11,7 @@ type CartItem = {
   product_id: number;
   name: string;
   description?: string | null;
+  stock?: number | null;
   quantity: number;
   price: number | string;
   subtotal: number | string;
@@ -116,15 +117,19 @@ export default function CartPage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center border border-border rounded-md">
                 <button
-                  className="w-8 h-8 hover:bg-background text-sm"
+                  aria-label="Quitar uno"
+                  className="w-8 h-8 hover:bg-background text-sm disabled:opacity-40"
                   onClick={() => changeQty(it.product_id, Math.max(1, it.quantity - 1))}
+                  disabled={it.quantity <= 1}
                 >
                   −
                 </button>
                 <span className="w-8 text-center text-sm">{it.quantity}</span>
                 <button
-                  className="w-8 h-8 hover:bg-background text-sm"
+                  aria-label="Agregar uno"
+                  className="w-8 h-8 hover:bg-background text-sm disabled:opacity-40"
                   onClick={() => changeQty(it.product_id, it.quantity + 1)}
+                  disabled={it.quantity >= Number(it.stock ?? 0)}
                 >
                   +
                 </button>

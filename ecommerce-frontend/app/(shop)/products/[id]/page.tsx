@@ -95,7 +95,7 @@ export default async function ProductDetail({
 
           {/* Caja de compra (cliente) */}
           <div className="mt-6">
-            <BuyBox productId={Number(params.id)} />
+            <BuyBox productId={p.id} stock={Number(p.stock ?? 0)} />
           </div>
         </div>
       </div>

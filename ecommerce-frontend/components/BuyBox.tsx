@@ -5,9 +5,14 @@ import { useState } from "react";
 import { api } from "@/lib/api-client";
 import toast from "react-hot-toast";
 
-export default function BuyBox({ productId }: { productId: number }) {
+export default function BuyBox({ productId, stock }: { productId: number; stock: number }) {
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(false);
+  const outOfStock = stock <= 0;
+
+  if (outOfStock) {
+    return <p className="text-sm text-muted">Agotado</p>;
+  }
 
   async function add() {
     try {
@@ -23,15 +28,28 @@ export default function BuyBox({ productId }: { productId: number }) {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <input
-        id="qty"
-        type="number"
-        min={1}
-        value={qty}
-        onChange={(e) => setQty(Math.max(1, Number(e.target.value || 1)))}
-        className="no-spinner rounded-md border border-border bg-surface px-3 py-2.5 w-20 text-sm text-center focus:border-accent"
-      />
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center border border-border rounded-md bg-surface">
+        <button
+          type="button"
+          aria-label="Quitar uno"
+          onClick={() => setQty((q) => Math.max(1, q - 1))}
+          disabled={qty <= 1}
+          className="w-10 h-10 hover:bg-background disabled:opacity-40"
+        >
+          −
+        </button>
+        <span className="w-10 text-center text-sm" aria-live="polite">{qty}</span>
+        <button
+          type="button"
+          aria-label="Agregar uno"
+          onClick={() => setQty((q) => Math.min(stock, q + 1))}
+          disabled={qty >= stock}
+          className="w-10 h-10 hover:bg-background disabled:opacity-40"
+        >
+          +
+        </button>
+      </div>
       <button
         onClick={add}
         disabled={loading}
