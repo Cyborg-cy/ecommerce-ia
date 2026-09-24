@@ -48,7 +48,7 @@ router.post(
           await client.query("BEGIN");
 
           const { rows: orderRows } = await client.query(
-            "SELECT id, user_id, payment_status FROM orders WHERE id=$1 FOR UPDATE",
+            "SELECT id, user_id, status, payment_status FROM orders WHERE id=$1 FOR UPDATE",
             [orderId]
           );
           if (!orderRows.length) {
@@ -61,6 +61,17 @@ router.post(
           // descontar stock ni reprocesar una orden ya confirmada.
           if (orderRows[0].payment_status === "paid") {
             console.log(`↩️ Orden ${orderId} ya estaba paga, se ignora el reintento`);
+            await client.query("COMMIT");
+            return res.status(200).send("ok");
+          }
+
+          // Pedido cancelado: no se reactiva ni se descuenta stock. Cancelar
+          // ya cancela el pago en Stripe, así que esto no debería pasar; si
+          // pasa, el dinero sí se cobró y hay que reembolsarlo a mano.
+          if (orderRows[0].status === "cancelled") {
+            console.warn(
+              `⚠️ Pago ${pi.id} confirmado para la orden ${orderId}, que está cancelada: revisar y reembolsar a mano`
+            );
             await client.query("COMMIT");
             return res.status(200).send("ok");
           }

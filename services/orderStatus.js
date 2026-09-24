@@ -88,6 +88,25 @@ export async function transitionOrderStatus({ orderId, newStatus, actorIsAdmin }
 
     let newPaymentStatus = order.payment_status;
 
+    // Cancelar un pedido sin pagar: se cancela también su pago en Stripe,
+    // si no el cliente todavía podría completarlo y el webhook marcaría
+    // como "paid" un pedido cancelado.
+    if (newStatus === "cancelled" && !cancellingPaidOrder && order.stripe_payment_intent_id) {
+      if (!stripe) {
+        await client.query("ROLLBACK");
+        throw new OrderTransitionError("Stripe no inicializado", 500);
+      }
+      const intent = await stripe.paymentIntents.retrieve(order.stripe_payment_intent_id);
+      if (intent.status === "succeeded" || intent.status === "processing") {
+        await client.query("ROLLBACK");
+        throw new OrderTransitionError(
+          "El pago de este pedido ya se está procesando; espera a que se confirme.",
+          409
+        );
+      }
+      if (intent.status !== "canceled") await stripe.paymentIntents.cancel(intent.id);
+    }
+
     if (cancellingPaidOrder) {
       if (!order.stripe_payment_intent_id) {
         await client.query("ROLLBACK");
