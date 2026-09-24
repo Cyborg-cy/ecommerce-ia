@@ -6,23 +6,26 @@ import Link from "next/link";
 import { api } from "@/lib/api-client";
 import RequireAuth from "@/components/RequireAuth";
 
+// Forma de la respuesta de GET /orders/:id → { order, items }
 type Item = {
-  id?: number;              // puede venir vacío o repetido
-  product_id?: number;      // lo usamos como key si está
+  id: number;
+  product_id: number;
   name: string;
   quantity: number;
-  price: number | string;
+  unit_price: number;
+  line_total: number;
 };
 
 type Order = {
   id: number;
-  total: number | string | null;
+  total: number | null;
   status: string | null;
   created_at: string;
-  payment_status?: string | null;
-  stripe_payment_intent_id?: string | null;
-  currency?: string | null;
-  items?: Item[];
+  shipping_name: string | null;
+  shipping_phone: string | null;
+  shipping_address: string | null;
+  shipping_city: string | null;
+  shipping_zip: string | null;
 };
 
 function money(v: unknown) {
@@ -34,6 +37,7 @@ export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const r = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -44,7 +48,8 @@ export default function OrderDetailPage() {
         return;
       }
       const { data } = await api.get(`/orders/${orderId}`);
-      setOrder(data as Order);
+      setOrder(data.order as Order);
+      setItems((data.items ?? []) as Item[]);
     } catch (e) {
       console.error(e);
       r.replace("/account/orders");
@@ -77,38 +82,32 @@ export default function OrderDetailPage() {
             </div>
             <div className="text-sm text-muted mt-1 space-x-1">
               <span>Estado: <span className="text-foreground">{order.status ?? "pendiente"}</span></span>
-              <span>· Pago: <span className="text-foreground">{order.payment_status ?? "desconocido"}</span></span>
-              {order.currency && <span>· Moneda: <span className="text-foreground">{order.currency.toUpperCase()}</span></span>}
+            </div>
+
+            <h2 className="font-serif text-lg mt-8 mb-2">Envío</h2>
+            <div className="text-sm">
+              <div>{order.shipping_name || "—"}</div>
+              <div className="text-muted">
+                {[order.shipping_address, order.shipping_city, order.shipping_zip].filter(Boolean).join(", ") || "—"}
+              </div>
+              <div className="text-muted">{order.shipping_phone || "—"}</div>
             </div>
 
             <h2 className="font-serif text-lg mt-8 mb-2">Productos</h2>
             <ul className="divide-y divide-border border-y border-border">
-              {(order.items ?? []).map((it, idx) => {
-                const priceNum =
-                  typeof it.price === "string" ? parseFloat(it.price) : Number(it.price);
-                const unit = Number.isFinite(priceNum) ? priceNum : 0;
-                const qty = Number(it.quantity || 0);
-                const subtotal = unit * qty;
-
-                // ✅ key robusta: usa product_id si existe; si no, combina id/idx
-                const key = it.product_id != null
-                  ? `prod-${it.product_id}`
-                  : `row-${it.id ?? "noid"}-${idx}`;
-
-                return (
-                  <li key={key} className="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="font-medium">{it.name}</div>
-                      <div className="text-sm text-muted">
-                        Cantidad: {qty} · ${money(unit)} c/u
-                      </div>
+              {items.map((it) => (
+                <li key={it.id} className="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="font-medium">{it.name}</div>
+                    <div className="text-sm text-muted">
+                      Cantidad: {it.quantity} · ${money(it.unit_price)} c/u
                     </div>
-                    <div className="font-medium sm:text-right">
-                      ${money(subtotal)}
-                    </div>
-                  </li>
-                );
-              })}
+                  </div>
+                  <div className="font-medium sm:text-right">
+                    ${money(it.line_total)}
+                  </div>
+                </li>
+              ))}
             </ul>
 
             <div className="flex items-center justify-between mt-6">
