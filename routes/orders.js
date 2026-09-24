@@ -153,7 +153,7 @@ router.put("/:id", verifyToken, validate(updateOrderStatusSchema), async (req, r
 
 /**
  * DELETE /orders/:id
- * Eliminar pedido y devolver stock.
+ * Eliminar pedido (devuelve stock solo si estaba pagado).
  * - Dueño: solo si está "pending"
  * - Admin: siempre
  */
@@ -208,16 +208,19 @@ router.delete("/:id", verifyToken, async (req, res) => {
       }
     }
 
-    // Devuelve stock y elimina items
-    const { rows: items } = await client.query(
-      "SELECT product_id, quantity FROM order_items WHERE order_id = $1",
-      [orderId]
-    );
-    for (const it of items) {
-      await client.query(
-        "UPDATE products SET stock = stock + $1 WHERE id = $2",
-        [it.quantity, it.product_id]
+    // Devuelve stock solo si estaba pagada: el stock se descuenta en el
+    // webhook al confirmar el pago, así que una orden sin pagar nunca lo restó.
+    if (wasPaid) {
+      const { rows: items } = await client.query(
+        "SELECT product_id, quantity FROM order_items WHERE order_id = $1",
+        [orderId]
       );
+      for (const it of items) {
+        await client.query(
+          "UPDATE products SET stock = stock + $1 WHERE id = $2",
+          [it.quantity, it.product_id]
+        );
+      }
     }
     await client.query("DELETE FROM order_items WHERE order_id = $1", [orderId]);
 
