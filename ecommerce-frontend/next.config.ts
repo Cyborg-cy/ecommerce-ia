@@ -19,6 +19,14 @@ const nextConfig: NextConfig = {
       { protocol: "http", hostname: "localhost" },
     ],
   },
+
+  // ↪️ /orders era un duplicado de /account/orders; se redirige para no romper enlaces viejos
+  async redirects() {
+    return [
+      { source: "/orders", destination: "/account/orders", permanent: true },
+      { source: "/orders/:id", destination: "/account/orders/:id", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;
