@@ -3,7 +3,10 @@ import pool from "../db.js";
 import bcrypt from "bcrypt";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { registerSchema } from "../schemas/userSchemas.js"
+import { registerSchema, updateMeSchema } from "../schemas/userSchemas.js"
+
+// Columnas del perfil que ve/edita el propio usuario (nunca password ni role).
+const PROFILE_COLUMNS = "id, name, email, role, phone, address_line, city, zip, created_at";
 
 const router = express.Router();
 
@@ -42,6 +45,59 @@ router.post("/register", validate(registerSchema), async (req, res) => {
 // El login vive en POST /auth/login (routes/auth.js), que además emite
 // refresh token. Antes existía POST /users/login duplicado y desincronizado
 // (sin refresh, expiración hardcodeada) — se eliminó.
+
+// =====================
+// GET /users/me
+// Perfil del usuario autenticado
+// (va antes de las rutas /:id para que "me" no se tome como un id)
+// =====================
+router.get("/me", verifyToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT ${PROFILE_COLUMNS} FROM users WHERE id = $1`,
+            [req.user.id]
+        );
+        if (!result.rows.length) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error("❌ GET /users/me:", err);
+        res.status(500).json({ error: "Error al obtener el perfil" });
+    }
+});
+
+// =====================
+// PUT /users/me
+// Editar nombre, teléfono y dirección del propio usuario (parcial)
+// =====================
+router.put("/me", verifyToken, validate(updateMeSchema), async (req, res) => {
+    // Tras validate, req.body solo trae claves del schema (stripUnknown),
+    // así que es seguro usarlas como nombres de columna.
+    const fields = Object.entries(req.body).map(([key, value]) => [
+        key,
+        value === "" ? null : value, // "" borra el dato
+    ]);
+
+    const sets = fields.map(([key], i) => `${key} = $${i + 1}`);
+    const params = fields.map(([, value]) => value);
+    params.push(req.user.id);
+
+    try {
+        const result = await pool.query(
+            `UPDATE users SET ${sets.join(", ")} WHERE id = $${params.length}
+             RETURNING ${PROFILE_COLUMNS}`,
+            params
+        );
+        if (!result.rows.length) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error("❌ PUT /users/me:", err);
+        res.status(500).json({ error: "Error al actualizar el perfil" });
+    }
+});
 
 // =====================
 // GET /users

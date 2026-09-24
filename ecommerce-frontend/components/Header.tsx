@@ -61,6 +61,7 @@ export default function Header() {
           <div className="hidden sm:flex items-center gap-5">
             <NavLink href="/products">Productos</NavLink>
             {token && <NavLink href="/account/orders">Mis pedidos</NavLink>}
+            {token && <NavLink href="/account">Mi perfil</NavLink>}
           </div>
         </nav>
 
