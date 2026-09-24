@@ -3,6 +3,8 @@ import express from "express";
 import Stripe from "stripe";
 import pool from "../db.js";
 import { verifyToken } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import { createIntentSchema } from "../schemas/orderSchemas.js";
 
 const router = express.Router();
 
@@ -23,8 +25,14 @@ try {
  * - El carrito se vacía aquí mismo: lo que se cobra queda reservado en
  *   la orden, no se puede pagar dos veces ni cobrar algo distinto a lo
  *   que finalmente se entrega.
+ * - Body: { shipping: { name, phone?, address_line, city, zip }, save_to_profile? }
+ *   La dirección se copia a la orden: si el usuario cambia su perfil después,
+ *   el pedido conserva la dirección a la que se envió.
  */
-router.post("/create-intent", verifyToken, async (req, res) => {
+router.post("/create-intent", verifyToken, validate(createIntentSchema), async (req, res) => {
+  const { shipping, save_to_profile } = req.body;
+  const phone = shipping.phone || null;
+
   if (!stripe) {
     return res.status(500).json({ error: "Stripe no inicializado" });
   }
@@ -76,11 +84,19 @@ router.post("/create-intent", verifyToken, async (req, res) => {
     }
 
     const { rows: orderRows } = await client.query(
-      `INSERT INTO orders (user_id, total, status, payment_status)
-       VALUES ($1, $2, 'pending', 'unpaid')
+      `INSERT INTO orders (user_id, total, status, payment_status,
+                           shipping_name, shipping_phone, shipping_address, shipping_city, shipping_zip)
+       VALUES ($1, $2, 'pending', 'unpaid', $3, $4, $5, $6, $7)
        RETURNING id`,
-      [req.user.id, total]
+      [req.user.id, total, shipping.name, phone, shipping.address_line, shipping.city, shipping.zip]
     );
+
+    if (save_to_profile) {
+      await client.query(
+        "UPDATE users SET phone=$1, address_line=$2, city=$3, zip=$4 WHERE id=$5",
+        [phone, shipping.address_line, shipping.city, shipping.zip, req.user.id]
+      );
+    }
     const orderId = orderRows[0].id;
 
     for (const r of rows) {
