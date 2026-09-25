@@ -26,4 +26,4 @@ router.get("/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
-export default router; // 👈 export por defecto
+export default router;

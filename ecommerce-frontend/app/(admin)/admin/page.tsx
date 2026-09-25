@@ -8,7 +8,7 @@ type Stats = {
   products: number | null;
   users: number | null;
   orders: number | null;
-  revenue: number | null;                // 👈 nuevo
+  revenue: number | null;
   ordersByStatus?: { status: string; count: number }[];
 };
 

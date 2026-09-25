@@ -73,7 +73,7 @@ router.get("/__health", (_req, res) => {
   });
 });
 
-// ⚠️ IMPORTANTE: el nombre del campo es 'file' (así lo mandas en el front)
+// El frontend envía la imagen en el campo "file" (multipart/form-data)
 router.post("/image", verifyToken, verifyAdmin, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No se recibió archivo" });

@@ -134,7 +134,7 @@ export default function AdminOrdersPage() {
 
   async function updateStatus(id: number, newStatus: string) {
     try {
-      setUpdatingId(id); // 👈 deshabilita el selector solo para ese pedido
+      setUpdatingId(id); // deshabilita el selector solo para ese pedido
       const token = localStorage.getItem("token") || "";
       const res = await fetch(`${base}/admin/orders/${id}/status`, {
         method: "PUT",

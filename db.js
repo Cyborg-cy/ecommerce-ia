@@ -23,7 +23,7 @@ if (process.env.DATABASE_URL) {
 }
 
 // Evita pool.connect() permanente; deja que el pool gestione conexiones.
-// Si quieres testear al arrancar:
+// Comprueba la conexión al arrancar (solo para el log).
 pool
   .query("SELECT 1")
   .then(() => console.log("✅ PostgreSQL listo"))

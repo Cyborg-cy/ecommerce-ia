@@ -42,13 +42,12 @@ router.get("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
   res.json(rows[0]);
 });
 
-// PUT /admin/users/:id  -> editar campos básicos (opcional si quieres editar, el rol ya lo manejas con PATCH)
+// PUT /admin/users/:id -> editar nombre y email (el rol se cambia con PATCH /role)
 router.put("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ error: "ID inválido" });
   }
-  // permite actualizar name/email; el rol mejor con PATCH /role como ya haces
   let { name, email } = req.body || {};
   name = (name ?? "").trim();
   email = (email ?? "").trim();
@@ -185,7 +184,7 @@ router.get("/products", verifyToken, verifyAdmin, async (_req, res) => {
   res.json({ items: rows });
 });
 
-/* ---------- ORDERS (ejemplo que ya tienes) ---------- */
+/* ---------- ORDERS ---------- */
 // GET /admin/orders?status=paid&from=2025-09-01&to=2025-09-30
 router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
   const { status, from, to } = req.query;
@@ -284,7 +283,7 @@ router.put("/orders/:id/status", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
-/* ---------- STATS (ejemplo que ya tienes) ---------- */
+/* ---------- STATS ---------- */
 // GET /admin/stats
 router.get("/stats", verifyToken, verifyAdmin, async (_req, res) => {
   try {

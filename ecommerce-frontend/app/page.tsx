@@ -25,7 +25,6 @@ async function getProducts(): Promise<Product[]> {
     if (!res.ok) throw new Error(`API /products respondió ${res.status}`);
     const data = await res.json();
 
-    // Ajusta según tu backend
     if (Array.isArray(data)) return data;            // caso: array directo
     if (Array.isArray(data.items)) return data.items; // caso: { items, meta }
     console.error("Formato inesperado de /products:", data);

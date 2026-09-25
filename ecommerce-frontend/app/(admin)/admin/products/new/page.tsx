@@ -39,7 +39,7 @@ export default function AdminNewProductPage() {
     price: "",
     stock: "",
     category_id: "",
-    image_url: "", // 👈 importantísimo: string vacío por defecto
+    image_url: "", // siempre string: un input controlado no acepta undefined
   });
   const [file, setFile] = useState<File | null>(null);
 
@@ -55,7 +55,7 @@ export default function AdminNewProductPage() {
   async function uploadImage(file: File): Promise<string> {
     const token = localStorage.getItem("token") || "";
     const form = new FormData();
-    form.append("file", file, file.name); // 👈 incluye filename
+    form.append("file", file, file.name);
 
     const res = await fetch(`${base}/uploads/image`, {
       method: "POST",
@@ -67,7 +67,7 @@ export default function AdminNewProductPage() {
       throw new Error(`POST /uploads/image → ${res.status} ${t || ""}`.trim());
     }
     const data = await res.json();
-    return String(data.url || ""); // 👈 devolvemos string sí o sí
+    return String(data.url || "");
   }
 
   // ====== Cargar categorías ======
@@ -289,15 +289,15 @@ export default function AdminNewProductPage() {
           <div>
             <label className="block text-sm mb-1.5 text-foreground/80">URL de imagen (opcional)</label>
             <input
-              key={`image-url-${mode}`}             // 👈 fuerza remount cuando cambia mode
+              key={`image-url-${mode}`} // fuerza el remount al cambiar de modo
               type="url"
               className="w-full rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm focus:border-accent"
               placeholder="https://…"
-              value={typeof f.image_url === "string" ? f.image_url : ""} // 👈 siempre string
+              value={typeof f.image_url === "string" ? f.image_url : ""}
               onChange={(e) =>
                 setF((prev) => ({
                   ...prev,
-                  image_url: e.target.value ?? "",   // 👈 nunca undefined
+                  image_url: e.target.value ?? "",
                 }))
               }
               autoComplete="off"
