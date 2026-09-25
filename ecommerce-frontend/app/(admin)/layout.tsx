@@ -26,7 +26,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <header className="bg-foreground text-white">
           <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-6">
             <div className="flex items-center gap-3 shrink-0">
-              <Link href="/" className="font-serif text-lg">Tienda</Link>
+              <Link href="/" className="font-serif text-lg">Ecommerce</Link>
               <span className="text-white/30">/</span>
               <span className="text-sm text-white/70">Admin</span>
             </div>

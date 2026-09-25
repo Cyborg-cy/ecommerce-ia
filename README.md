@@ -1,4 +1,4 @@
-# ecommerce-ia
+# ecommerce
 
 Tienda en línea con backend propio en Node/Express + Postgres, pagos con Stripe, y frontend en Next.js. Proyecto personal en desarrollo.
 

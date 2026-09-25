@@ -56,7 +56,7 @@ export default function Header() {
         {/* Izquierda: marca / navegación */}
         <nav className="flex items-center gap-6">
           <Link href="/" className="font-serif text-lg tracking-tight">
-            Tienda
+            Ecommerce
           </Link>
           <div className="hidden sm:flex items-center gap-5">
             <NavLink href="/products">Productos</NavLink>
