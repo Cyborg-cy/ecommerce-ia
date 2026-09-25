@@ -170,6 +170,21 @@ router.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
 
 
 
+/* ---------- PRODUCTS ---------- */
+// GET /admin/products -> todos los productos (el público /products pagina de 10 en 10)
+router.get("/products", verifyToken, verifyAdmin, async (_req, res) => {
+  // Nota: 500 es un límite de seguridad, no paginación real (igual que /admin/orders).
+  const { rows } = await pool.query(
+    `SELECT p.id, p.name, p.description, p.price::numeric::float8 AS price, p.stock,
+            p.image_url, p.created_at, p.category_id, c.name AS category_name
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+      ORDER BY p.id ASC
+      LIMIT 500`
+  );
+  res.json({ items: rows });
+});
+
 /* ---------- ORDERS (ejemplo que ya tienes) ---------- */
 // GET /admin/orders?status=paid&from=2025-09-01&to=2025-09-30
 router.get("/orders", verifyToken, verifyAdmin, async (req, res) => {
