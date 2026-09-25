@@ -26,7 +26,7 @@ export default function Recommendations({ productId, limit = 8 }: { productId: n
           process.env.NEXT_PUBLIC_API_BASE ||
           process.env.NEXT_PUBLIC_API_URL ||
           "http://localhost:3000";
-        const res = await fetch(`${base}/recommendations/${productId}?limit=${limit}`, { cache: "no-store" });
+        const res = await fetch(`${base}/products/recommendations/${productId}?limit=${limit}`, { cache: "no-store" });
         if (!res.ok) throw new Error("No se pudo cargar recomendaciones");
         const data = await res.json();
         if (alive) setItems(Array.isArray(data) ? data : []);

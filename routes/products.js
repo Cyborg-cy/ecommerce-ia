@@ -210,6 +210,11 @@ router.get("/:id", async (req, res) => {
 });
 
 // Recomendaciones basadas en el producto actual
+// Mismas columnas que GET /products, para que ProductCard tenga imagen y categoría.
+const REC_SELECT = `SELECT p.id, p.name, p.description, p.price::numeric::float8 AS price, p.stock,
+                p.category_id, c.name AS category_name, p.image_url
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id`;
 router.get("/recommendations/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -236,12 +241,11 @@ router.get("/recommendations/:id", async (req, res) => {
     // 1) Misma categoría + precio ±20%
     if (hasCategory) {
       const { rows } = await pool.query(
-        `SELECT id, name, description, price::numeric::float8 AS price, stock, category_id
-         FROM products
-         WHERE id <> $1
-           AND category_id = $2
-           AND price BETWEEN $3 AND $4
-         ORDER BY ABS(price - $5) ASC, id DESC
+        `${REC_SELECT}
+         WHERE p.id <> $1
+           AND p.category_id = $2
+           AND p.price BETWEEN $3 AND $4
+         ORDER BY ABS(p.price - $5) ASC, p.id DESC
          LIMIT $6`,
         [id, base.category_id, minPrice, maxPrice, basePrice, limit]
       );
@@ -252,12 +256,11 @@ router.get("/recommendations/:id", async (req, res) => {
     if (out.length < limit && hasCategory) {
       const excludeIds = out.map((r) => r.id).concat([id]);
       const { rows } = await pool.query(
-        `SELECT id, name, description, price::numeric::float8 AS price, stock, category_id
-         FROM products
-         WHERE id <> $1
-           AND category_id = $2
-           AND id <> ALL($3::int[])
-         ORDER BY ABS(price - $4) ASC, id DESC
+        `${REC_SELECT}
+         WHERE p.id <> $1
+           AND p.category_id = $2
+           AND p.id <> ALL($3::int[])
+         ORDER BY ABS(p.price - $4) ASC, p.id DESC
          LIMIT $5`,
         [id, base.category_id, excludeIds, basePrice, limit - out.length]
       );
@@ -267,11 +270,10 @@ router.get("/recommendations/:id", async (req, res) => {
     // 3) Si aún faltan, global por cercanía de precio
     if (out.length < limit) {
       const { rows } = await pool.query(
-        `SELECT id, name, description, price::numeric::float8 AS price, stock, category_id
-         FROM products
-         WHERE id <> $1
-           AND id <> ALL($2::int[])
-         ORDER BY ABS(price - $3) ASC, id DESC
+        `${REC_SELECT}
+         WHERE p.id <> $1
+           AND p.id <> ALL($2::int[])
+         ORDER BY ABS(p.price - $3) ASC, p.id DESC
          LIMIT $4`,
         [id, out.map((r) => r.id), basePrice, limit - out.length]
       );
