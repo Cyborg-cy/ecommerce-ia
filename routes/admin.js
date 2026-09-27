@@ -1,6 +1,4 @@
 // routes/admin.js
-console.log("ADMIN ROUTER CARGADO");
-
 
 import express from "express";
 import pool from "../db.js";

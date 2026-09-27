@@ -27,9 +27,6 @@ router.post(
         return res.status(400).send(`Webhook Error: ${err.message}`);
       }
 
-      // Log de evento
-      console.log("Evento recibido:", event.type);
-
       // --- HANDLER ---
       if (event.type === "payment_intent.succeeded") {
         const pi = event.data.object;
