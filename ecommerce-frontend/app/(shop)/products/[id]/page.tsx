@@ -44,9 +44,13 @@ async function getProduct(id: string): Promise<Product> {
 }
 
 // SEO dinámico (opcional pero recomendado)
-export async function generateMetadata({ params }: { params: { id: string } }) {
+// En Next 15 `params` llega como Promise
+type Props = { params: Promise<{ id: string }> };
+
+export async function generateMetadata({ params }: Props) {
   try {
-    const p = await getProduct(params.id);
+    const { id } = await params;
+    const p = await getProduct(id);
     return {
       title: `${p.name} | E-commerce`,
       description: p.description ?? "",
@@ -58,12 +62,9 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   }
 }
 
-export default async function ProductDetail({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const p = await getProduct(params.id);
+export default async function ProductDetail({ params }: Props) {
+  const { id } = await params;
+  const p = await getProduct(id);
 
   const price =
     typeof p.price === "number" ? p.price.toFixed(2) : String(p.price ?? "");
