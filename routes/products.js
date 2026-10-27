@@ -319,7 +319,8 @@ router.post(
       }
 
       // normaliza image_url
-      image_url = image_url === undefined ? null : (String(image_url).trim() || null);
+      // == null cubre undefined y null: String(null) guardaba el texto "null".
+      image_url = image_url == null ? null : (String(image_url).trim() || null);
 
       const result = await pool.query(
         `INSERT INTO products (name, description, price, stock, category_id, image_url)
